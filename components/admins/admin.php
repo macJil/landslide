@@ -4,13 +4,13 @@ session_start();
 // Handle logout only if explicitly requested
 if (isset($_GET['logout']) && $_GET['logout'] === 'true') {
     session_destroy();
-    header("Location: ../index.php");
+    header("Location: /landslide/index.php");
     exit;
 }
 
 // Redirect if no active session
 if (empty($_SESSION['USERNAME'])) {
-    header("Location: ../index.php");
+    header("Location: /landslide/index.php");
     exit;
 }
 ?>

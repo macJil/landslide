@@ -7,8 +7,9 @@
         $now = new DateTimeImmutable('now', $timezone);
 
         $new_user = new users(
-            $username = $_POST['username'],
+            
             $full_name = $_POST['full_name'],
+            $username = $_POST['username'],
             $email = $_POST['email'],
             $password = $_POST['password'],
             $role = $_POST['role'],
@@ -16,7 +17,7 @@
             
 
         );
-        $new_user->add_user($conn);
+        echo $new_user->add_user($conn);
         
         
     }

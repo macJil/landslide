@@ -32,16 +32,13 @@
             $result = mysqli_query($con, $sql);
             if($result){
             
-                    return "<script>alert('$this->full_name successfully Added...'); window.location.href='../index.php'</script>";
+                    return "<script>alert('$this->full_name successfully Added...'); window.location.href='/landslide/index.php'</script>";
                 } else {
-                    return "<script>alert('Unsuccessfully... Error or Invalid'); window.location.href='../index.php'</script>";
+                    return "<script>alert('Unsuccessfully... Error or Invalid'); window.location.href='/landslide/index.php'</script>";
             }
 
        }
-       public function get_info(){
-            return $this->username ."<br>" . $this->created_at;
-       }
-       
+      
     }
     class temp_user 
     {   
@@ -64,7 +61,7 @@
                     $_SESSION['PASSWORD'] = $row['password'];
                     $_SESSION['ROLE'] = $row['role'];
                     $_SESSION['CREATED_AT'] = $row['created_at'];
-                    return "<script>alert('Admin Login Successfull!...'); window.location.href='../components/admins/admin.php';</script>";
+                    return "<script>alert('Admin Login Successfull!...'); window.location.href='/landslide/components/admins/admin.php';</script>";
                 } else if(($row['role'] === 'user')&&($this->password === $row['password'])){
                     $_SESSION['USERNAME'] = $row['username'];
                     $_SESSION['FULL_NAME'] = $row['full_name'];
@@ -72,13 +69,13 @@
                     $_SESSION['PASSWORD'] = $row['password'];
                     $_SESSION['ROLE'] = $row['role'];
                     $_SESSION['CREATED_AT'] = $row['created_at'];
-                    return "<script>alert('User Login Successfull!...'); window.location.href='../components/users/user.php';</script>";
+                    return "<script>alert('User Login Successfull!...'); window.location.href='/landslide/components/users/user.php';</script>";
                 } else {
-                    return "<script>alert('INVALID CREDENTIALS!'); window.location.href='../index.php';</script>";
+                    return "<script>alert('INVALID CREDENTIALS!'); window.location.href='/landslide/index.php';</script>";
                 }
             }
         } else {
-            return "<script>alert('INVALID CREDENTIALS!...'); window.location.href='../index.php';</script>";
+            return "<script>alert('INVALID CREDENTIALS!...'); window.location.href='/landslide/index.php';</script>";
         }
 
         }

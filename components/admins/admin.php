@@ -33,6 +33,7 @@ if (empty($_SESSION['USERNAME'])) {
             <li class="nav-item">
                 <!-- Switch button triggers JS confirm -->
                 <button class="btn btn-outline-primary" onclick="confirmLogout()">Switch to User</button>
+              
             </li>
         </ul>
     </div>

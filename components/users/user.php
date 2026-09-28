@@ -1,11 +1,7 @@
 <?php
 session_start();
-
-// Handle logout only if explicitly requested
-if (isset($_GET['logout']) && $_GET['logout'] === 'true') {
-    session_destroy();
-    header("Location: /landslide/index.php");
-    exit;
+if(isset($_POST['logout'])){
+    header("location: /landslide/index.php");
 }
 
 // Redirect if no active session
@@ -31,8 +27,7 @@ if (empty($_SESSION['USERNAME'])) {
                 <a class="btn btn-outline-danger" aria-current="page" href="">User Mode</a>
             </li>
             <li class="nav-item">
-                <!-- Switch button triggers JS confirm -->
-                <button class="btn btn-outline-primary" onclick="confirmLogout()">Switch to Admin</button>
+               <button command="show-modal" commandfor="logout" class="btn btn-outline-danger">Log out</button>
             </li>
         </ul>
     </div>
@@ -71,17 +66,23 @@ if (empty($_SESSION['USERNAME'])) {
            
         </div>
     </div>
-    <script>
-        function confirmLogout() {
-            let userChoice = confirm('Are you sure you want to Log out?');
-            if (userChoice) {
-                // Redirect with logout flag
-                window.location.href = "?logout=true";
-            } else {
-                // Do nothing, stay on the page
-            }
-        }
-    </script>
+    <div class="container" >
+        <dialog id="logout" class="table" style="width: 300px; border-radius: 15px">
+        
+        <span  style="display: flex; justify-content: center;">Are you sure you want to log out?</span>
+        <div style="display: flex; justify-content: center; gap: 10px; margin-top: 15px;">
+        
+            <form action="" method="post">
+                <button name="logout" class="btn btn-outline-danger">Yes</button>
+            </form>
+
+            <button command="close" commandfor="logout" class="btn btn-outline-warning">
+                No
+            </button>
+        </div>
+        </dialog>
+
+    </div>
 </body>
 
 <?php include("../footer.html"); ?>

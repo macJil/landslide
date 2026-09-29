@@ -1,11 +1,15 @@
-$(function () {
-    const $location = $('#risk-location-select');
-    const $panel = $('#reading-panel');
-    const $message = $('#reading-message');
-    const $historyBody = $('#weather-hourly-body');
-    if (!$location.length || !$panel.length || !$historyBody.length) return;
+(() => {
+    'use strict';
 
-    let pendingRequest = null;
+    const locationSelect = document.getElementById('risk-location-select');
+    const readingPanel = document.getElementById('reading-panel');
+    const readingMessage = document.getElementById('reading-message');
+    const historyBody = document.getElementById('weather-hourly-body');
+    const retryButton = document.getElementById('weather-retry');
+
+    if (!locationSelect || !readingPanel || !readingMessage || !historyBody) return;
+
+    let activeRequest = null;
     let requestTimer = null;
 
     function isAvailable(value) {
@@ -18,173 +22,333 @@ $(function () {
 
     function timeLabel(value) {
         if (!value) return '—';
-        const withZone = /(?:Z|[+-]\d{2}:?\d{2})$/i.test(value) ? value : `${value}+08:00`;
+        const time = String(value);
+        const withZone = /(?:Z|[+-]\d{2}:?\d{2})$/i.test(time) ? time : `${time}+08:00`;
         const parsed = new Date(withZone);
         return Number.isNaN(parsed.getTime())
-            ? value
+            ? time
             : parsed.toLocaleString('en-PH', { timeZone: 'Asia/Manila' });
     }
 
-    function resetHistory(message) {
-        $historyBody.empty().append(
-            $('<tr>').append($('<td>', { colspan: 19, class: 'text-center text-muted' }).text(message))
-        );
-        $('#weather-hourly-summary').text(message);
+    function setMessage(message, isError = false) {
+        readingMessage.textContent = message;
+        readingMessage.className = isError ? 'small text-danger' : 'small text-muted';
     }
 
-    function setRisk(rainfall) {
+    function resetHistory(message) {
+        historyBody.replaceChildren();
+        const row = document.createElement('tr');
+        const cell = document.createElement('td');
+        cell.colSpan = 19;
+        cell.className = 'text-center text-muted';
+        cell.textContent = message;
+        row.appendChild(cell);
+        historyBody.appendChild(row);
+
+        const summary = document.getElementById('weather-hourly-summary');
+        if (summary) summary.textContent = message;
+    }
+
+    function setRisk(rainfall, isStale) {
         const risk = rainfall.risk_level;
-        const riskClass = {
+        const classes = {
             low: 'text-bg-success',
             normal: 'text-bg-primary',
             medium: 'text-bg-warning',
             high: 'text-bg-danger'
-        }[risk] || 'text-bg-secondary';
+        };
+        const badge = document.getElementById('risk-level');
+        badge.className = `badge ${isStale ? 'text-bg-warning' : (classes[risk] || 'text-bg-secondary')}`;
+        badge.textContent = risk
+            ? `${isStale ? 'STALE — ' : ''}${risk.toUpperCase()}`
+            : 'UNAVAILABLE';
 
-        $('#risk-level')
-            .removeClass('text-bg-secondary text-bg-success text-bg-primary text-bg-warning text-bg-danger')
-            .addClass(riskClass)
-            .text(risk ? risk.toUpperCase() : 'UNAVAILABLE');
+        document.getElementById('rainfall-1h').textContent =
+            isAvailable(rainfall.rainfall_1h_mm)
+                ? `${number(rainfall.rainfall_1h_mm, 2)} mm`
+                : 'Unavailable';
 
-        $('#rainfall-1h').text(isAvailable(rainfall.rainfall_1h_mm)
-            ? `${number(rainfall.rainfall_1h_mm, 2)} mm` : 'Unavailable');
-        $('#rainfall-24h').text(isAvailable(rainfall.rainfall_24h_mm)
-            ? `${number(rainfall.rainfall_24h_mm, 2)} mm` : 'Unavailable');
-        $('#rainfall-72h').text(isAvailable(rainfall.rainfall_72h_mm)
-            ? `${number(rainfall.rainfall_72h_mm, 2)} mm` : 'Unavailable');
-        $('#reading-observed-at').text(timeLabel(rainfall.observed_at));
+        document.getElementById('rainfall-24h').textContent =
+            isAvailable(rainfall.rainfall_24h_mm)
+                ? `${number(rainfall.rainfall_24h_mm, 2)} mm`
+                : 'Unavailable';
+
+        document.getElementById('rainfall-72h').textContent =
+            isAvailable(rainfall.rainfall_72h_mm)
+                ? `${number(rainfall.rainfall_72h_mm, 2)} mm`
+                : 'Unavailable';
+
+        document.getElementById('reading-observed-at').textContent =
+            timeLabel(rainfall.observed_at);
+    }
+
+    function setUnavailable() {
+        setRisk({
+            risk_level: null,
+            rainfall_1h_mm: null,
+            rainfall_24h_mm: null,
+            rainfall_72h_mm: null,
+            observed_at: null
+        }, false);
+
+        setCurrent(null);
     }
 
     function setCurrent(current) {
-        $('#weather-temperature').text(isAvailable(current.temperature_2m)
-            ? `${number(current.temperature_2m)} °C` : '—');
-        $('#weather-apparent-temperature').text(isAvailable(current.apparent_temperature)
-            ? `${number(current.apparent_temperature)} °C` : '—');
-        $('#weather-humidity').text(isAvailable(current.relative_humidity_2m)
-            ? `${number(current.relative_humidity_2m, 0)}%` : '—');
+        const fields = [
+            'weather-temperature',
+            'weather-apparent-temperature',
+            'weather-humidity',
+            'weather-precipitation',
+            'weather-rain-showers',
+            'weather-wind',
+            'weather-wind-direction',
+            'weather-cloud-cover',
+            'weather-soil-moisture-shallow',
+            'weather-soil-moisture-deep',
+            'weather-code',
+            'weather-current-time'
+        ];
+
+        if (!current) {
+            fields.forEach((id) => {
+                document.getElementById(id).textContent = 'Unavailable';
+            });
+            return;
+        }
+
+        document.getElementById('weather-temperature').textContent =
+            isAvailable(current.temperature_2m)
+                ? `${number(current.temperature_2m)} °C`
+                : '—';
+
+        document.getElementById('weather-apparent-temperature').textContent =
+            isAvailable(current.apparent_temperature)
+                ? `${number(current.apparent_temperature)} °C`
+                : '—';
+
+        document.getElementById('weather-humidity').textContent =
+            isAvailable(current.relative_humidity_2m)
+                ? `${number(current.relative_humidity_2m, 0)}%`
+                : '—';
 
         const intervalMinutes = isAvailable(current.interval)
-            ? `${Math.round(Number(current.interval) / 60)}-minute interval` : 'API interval';
-        $('#weather-precipitation').text(isAvailable(current.precipitation)
-            ? `${number(current.precipitation, 2)} mm (${intervalMinutes})` : '—');
-        $('#weather-rain-showers').text(
-            `${number(current.rain, 2)} mm rain / ${number(current.showers, 2)} mm showers`
-        );
-        $('#weather-wind').text(
-            `${number(current.wind_speed_10m)} km/h / ${number(current.wind_gusts_10m)} km/h gusts`
-        );
-        $('#weather-wind-direction').text(isAvailable(current.wind_direction_10m)
-            ? `${number(current.wind_direction_10m, 0)}°` : '—');
-        $('#weather-cloud-cover').text(isAvailable(current.cloud_cover)
-            ? `${number(current.cloud_cover, 0)}%` : '—');
-        $('#weather-soil-moisture-shallow').text(isAvailable(current.soil_moisture_0_to_1cm)
-            ? `${number(current.soil_moisture_0_to_1cm, 3)} m³/m³` : '—');
-        $('#weather-soil-moisture-deep').text(isAvailable(current.soil_moisture_27_to_81cm)
-            ? `${number(current.soil_moisture_27_to_81cm, 3)} m³/m³` : '—');
-        $('#weather-code').text(isAvailable(current.weather_code)
-            ? String(Math.round(Number(current.weather_code))) : '—');
-        $('#weather-current-time').text(timeLabel(current.time));
+            ? `${Math.round(Number(current.interval) / 60)}-minute interval`
+            : 'API interval';
+
+        document.getElementById('weather-precipitation').textContent =
+            isAvailable(current.precipitation)
+                ? `${number(current.precipitation, 2)} mm (${intervalMinutes})`
+                : '—';
+
+        document.getElementById('weather-rain-showers').textContent =
+            `${number(current.rain, 2)} mm rain / ${number(current.showers, 2)} mm showers`;
+
+        document.getElementById('weather-wind').textContent =
+            `${number(current.wind_speed_10m)} km/h / ${number(current.wind_gusts_10m)} km/h gusts`;
+
+        document.getElementById('weather-wind-direction').textContent =
+            isAvailable(current.wind_direction_10m)
+                ? `${number(current.wind_direction_10m, 0)}°`
+                : '—';
+
+        document.getElementById('weather-cloud-cover').textContent =
+            isAvailable(current.cloud_cover)
+                ? `${number(current.cloud_cover, 0)}%`
+                : '—';
+
+        document.getElementById('weather-soil-moisture-shallow').textContent =
+            isAvailable(current.soil_moisture_0_to_1cm)
+                ? `${number(current.soil_moisture_0_to_1cm, 3)} m³/m³`
+                : '—';
+
+        document.getElementById('weather-soil-moisture-deep').textContent =
+            isAvailable(current.soil_moisture_27_to_81cm)
+                ? `${number(current.soil_moisture_27_to_81cm, 3)} m³/m³`
+                : '—';
+
+        document.getElementById('weather-code').textContent =
+            isAvailable(current.weather_code)
+                ? String(Math.round(Number(current.weather_code)))
+                : '—';
+
+        document.getElementById('weather-current-time').textContent =
+            timeLabel(current.time);
     }
 
-    function addCell($row, value) {
-        $row.append($('<td>').text(value === null || value === undefined ? '—' : value));
+    function addCell(row, value) {
+        const cell = document.createElement('td');
+        cell.textContent = value === null || value === undefined
+            ? '—'
+            : String(value);
+        row.appendChild(cell);
     }
 
     function setHistory(rows, retrievedAt) {
-        $historyBody.empty();
+        historyBody.replaceChildren();
+
         if (!Array.isArray(rows) || rows.length === 0) {
             resetHistory('The provider did not return hourly readings for this location.');
             return;
         }
 
-        rows.slice().reverse().forEach(function (reading) {
-            const $row = $('<tr>');
-            addCell($row, timeLabel(reading.time));
-            addCell($row, number(reading.temperature_2m));
-            addCell($row, number(reading.relative_humidity_2m, 0));
-            addCell($row, number(reading.apparent_temperature));
-            addCell($row, number(reading.precipitation, 2));
-            addCell($row, number(reading.rain, 2));
-            addCell($row, number(reading.showers, 2));
-            addCell($row, number(reading.wind_speed_10m));
-            addCell($row, number(reading.wind_direction_10m, 0));
-            addCell($row, number(reading.wind_gusts_10m));
-            addCell($row, number(reading.cloud_cover, 0));
-            addCell($row, number(reading.pressure_msl, 1));
-            addCell($row, number(reading.surface_pressure, 1));
-            addCell($row, number(reading.soil_moisture_0_to_1cm, 3));
-            addCell($row, number(reading.soil_moisture_1_to_3cm, 3));
-            addCell($row, number(reading.soil_moisture_3_to_9cm, 3));
-            addCell($row, number(reading.soil_moisture_9_to_27cm, 3));
-            addCell($row, number(reading.soil_moisture_27_to_81cm, 3));
-            addCell($row, isAvailable(reading.weather_code)
-                ? String(Math.round(Number(reading.weather_code))) : '—');
-            $historyBody.append($row);
+        rows.slice().reverse().forEach((reading) => {
+            const row = document.createElement('tr');
+
+            addCell(row, timeLabel(reading.time));
+            addCell(row, number(reading.temperature_2m));
+            addCell(row, number(reading.relative_humidity_2m, 0));
+            addCell(row, number(reading.apparent_temperature));
+            addCell(row, number(reading.precipitation, 2));
+            addCell(row, number(reading.rain, 2));
+            addCell(row, number(reading.showers, 2));
+            addCell(row, number(reading.wind_speed_10m));
+            addCell(row, number(reading.wind_direction_10m, 0));
+            addCell(row, number(reading.wind_gusts_10m));
+            addCell(row, number(reading.cloud_cover, 0));
+            addCell(row, number(reading.pressure_msl, 1));
+            addCell(row, number(reading.surface_pressure, 1));
+            addCell(row, number(reading.soil_moisture_0_to_1cm, 3));
+            addCell(row, number(reading.soil_moisture_1_to_3cm, 3));
+            addCell(row, number(reading.soil_moisture_3_to_9cm, 3));
+            addCell(row, number(reading.soil_moisture_9_to_27cm, 3));
+            addCell(row, number(reading.soil_moisture_27_to_81cm, 3));
+            addCell(row, isAvailable(reading.weather_code)
+                ? String(Math.round(Number(reading.weather_code)))
+                : '—');
+
+            historyBody.appendChild(row);
         });
 
-        $('#weather-hourly-summary').text(
-            `${rows.length} hourly readings loaded. API refreshed ${timeLabel(retrievedAt)}.`
-        );
+        const summary = document.getElementById('weather-hourly-summary');
+        if (summary) {
+            summary.textContent =
+                `${rows.length} hourly readings loaded. API refreshed ${timeLabel(retrievedAt)}.`;
+        }
     }
 
-    function loadWeather() {
-        const locationId = $location.val();
-        if (pendingRequest) pendingRequest.abort();
+    function messageFor(errorCode) {
+        const messages = {
+            location_coordinates_missing:
+                'This location needs latitude and longitude before weather can load.',
+            location_not_found:
+                'The selected location is inactive or unavailable.',
+            authentication_required:
+                'Your session expired. Sign in again to load weather readings.',
+            weather_provider_unavailable:
+                'The weather provider is temporarily unavailable. Try again shortly.',
+            database_unavailable:
+                'Location data could not be read. Check the local MySQL connection.',
+            weather_history_unavailable:
+                'The API returned no recent hourly history for this location.',
+            invalid_csrf_token:
+                'Your security token expired. Reload this page and try again.',
+            invalid_location_id:
+                'Select a valid location and try again.',
+            invalid_response:
+                'The weather endpoint did not return JSON. Check the PHP error log and endpoint path.'
+        };
+
+        return messages[errorCode] ||
+            'Weather readings could not be loaded. Check the location coordinates and try again.';
+    }
+
+    async function loadWeather() {
+        const locationId = locationSelect.value;
+        if (activeRequest) activeRequest.abort();
 
         if (!locationId) {
-            $panel.attr('hidden', true);
-            $message.text('Choose a location to load its latest weather readings.');
+            if (retryButton) retryButton.hidden = true;
+            setMessage('Choose a location with saved coordinates to load weather readings.');
+            setUnavailable();
             resetHistory('Choose a location above to load its hourly readings.');
             return;
         }
 
-        $panel.attr('hidden', true);
-        $message.text('Loading weather data and calculating the prototype risk level…');
+        activeRequest = new AbortController();
+
+        if (retryButton) retryButton.hidden = true;
+        setMessage('Loading weather data and calculating the prototype risk level…');
         resetHistory('Loading hourly readings…');
 
-        pendingRequest = $.ajax({
-            url: '../../api/weather.php',
-            method: 'POST',
-            dataType: 'json',
-            data: {
-                location_id: locationId,
-                csrf_token: $('#weather-csrf-token').val()
-            }
-        }).done(function (response) {
-            if ($location.val() !== locationId || !response.data) return;
+        const requestBody = new URLSearchParams({
+            location_id: locationId,
+            csrf_token: document.getElementById('weather-csrf-token').value
+        });
 
-            const data = response.data;
-            setRisk(data.rainfall);
+        try {
+            const response = await fetch('../../api/weather.php', {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: {
+                    'Accept': 'application/json',
+                    'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8'
+                },
+                body: requestBody,
+                signal: activeRequest.signal
+            });
+
+            let payload;
+            try {
+                payload = await response.json();
+            } catch (_jsonError) {
+                throw new Error('invalid_response');
+            }
+
+            if (!response.ok || !payload.data) {
+                throw new Error(payload.error || 'weather_provider_unavailable');
+            }
+
+            if (locationSelect.value !== locationId) return;
+
+            const data = payload.data;
+            setRisk(data.rainfall, data.stale === true);
             setCurrent(data.current);
             setHistory(data.hourly, data.retrieved_at);
-            $panel.removeAttr('hidden');
-            $message.text(
-                `Weather readings loaded for ${data.location.location_name}` +
-                `${data.location.purok_zone ? ` — ${data.location.purok_zone}` : ''}.`
-            );
-        }).fail(function (xhr, status) {
-            if (status === 'abort' || $location.val() !== locationId) return;
 
-            const error = xhr.responseJSON?.error;
-            const messages = {
-                location_coordinates_missing: 'This location needs verified latitude and longitude before the weather API can return readings.',
-                location_not_found: 'The selected location is inactive or unavailable.',
-                authentication_required: 'Your session has expired. Sign in again to load weather readings.',
-                weather_provider_unavailable: 'The weather provider is temporarily unavailable. Try again shortly.',
-                weather_history_unavailable: 'No recent hourly data was returned for this location.',
-                invalid_csrf_token: 'Your session token expired. Reload the page and try again.'
-            };
+            if (data.stale) {
+                setMessage(
+                    `Weather API unavailable. Showing the last saved Open-Meteo risk summary for ${data.location.location_name}, observed ${timeLabel(data.rainfall.observed_at)}. Current conditions are unavailable.`,
+                    true
+                );
+            } else if (data.persistence_warning) {
+                const area = data.location.purok_zone
+                    ? ` — ${data.location.purok_zone}`
+                    : '';
 
-            $panel.attr('hidden', true);
-            $message.text(messages[error] || 'Weather readings could not be loaded. Check the location coordinates and try again.');
+                setMessage(
+                    `Live weather loaded for ${data.location.location_name}${area}, but its rainfall summary could not be saved to the admin readings list. Check the PHP error log.`,
+                    true
+                );
+            } else {
+                const area = data.location.purok_zone
+                    ? ` — ${data.location.purok_zone}`
+                    : '';
+
+                setMessage(`Weather readings loaded for ${data.location.location_name}${area}.`);
+            }
+        } catch (error) {
+            if (error.name === 'AbortError') return;
+            if (locationSelect.value !== locationId) return;
+
+            if (retryButton) retryButton.hidden = false;
+            setUnavailable();
+            setMessage(messageFor(error.message), true);
             resetHistory('No hourly readings loaded.');
-        });
+        }
     }
 
-    $location.on('change', function () {
-        clearTimeout(requestTimer);
-        requestTimer = setTimeout(loadWeather, 250);
+    locationSelect.addEventListener('change', () => {
+        window.clearTimeout(requestTimer);
+        requestTimer = window.setTimeout(loadWeather, 200);
     });
 
-    if ($location.val()) loadWeather();
-});
+    if (retryButton) retryButton.addEventListener('click', loadWeather);
+
+    if (locationSelect.value) {
+        loadWeather();
+    } else {
+        setUnavailable();
+        resetHistory('No weather readings loaded. Select a coordinate-ready location after one is added.');
+    }
+})();

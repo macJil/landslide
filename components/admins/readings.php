@@ -1,3 +1,99 @@
+<?php
+declare(strict_types=1);
+
+require_once __DIR__ . '/../../app/bootstrap.php';
+require_admin();
+$readingRepository = new ReadingRepository($pdo);
+$locationRepository = new LocationRepository($pdo);
+$activeLocations = $locationRepository->activeForStudyArea();
+$allLocations = $locationRepository->adminList();
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    if (!csrf_is_valid($_POST['csrf_token'] ?? null)) {
+        flash('reading_message', 'Your session expired. Reload the page and try again.');
+        redirect_to('readings.php');
+    }
+
+    $action = post_string('action') ?: 'save';
+    $readingId = filter_var($_POST['reading_id'] ?? null, FILTER_VALIDATE_INT);
+    $invalidReadingId = array_key_exists('reading_id', $_POST)
+        && (!$readingId || $readingId < 1);
+    if (in_array($action, ['archive', 'restore'], true)) {
+        if (!$readingId || !$readingRepository->setArchived((int) $readingId, $action === 'archive')) {
+            flash('reading_message', 'The reading was not found.');
+        } else {
+            flash('reading_message', $action === 'archive'
+                ? 'Reading archived. Its original data remains in history.'
+                : 'Reading restored to current results.');
+        }
+        redirect_to('readings.php');
+    }
+
+    $locationId = filter_var($_POST['location_id'] ?? null, FILTER_VALIDATE_INT);
+    $existing = $readingId && $readingId > 0 ? $readingRepository->find((int) $readingId) : null;
+    $activeLocationIds = array_map(static fn(array $location): int => (int) $location['location_id'], $activeLocations);
+    $existingLocationMayRemain = $existing && (int) $existing['location_id'] === (int) $locationId;
+    $locationAllowed = $locationId && $locationId > 0
+        && (in_array((int) $locationId, $activeLocationIds, true) || $existingLocationMayRemain);
+
+    $rainfallFields = ['rainfall_1h_mm', 'rainfall_24h_mm', 'rainfall_72h_mm'];
+    $rainfall = [];
+    $rainfallValid = true;
+    $hasRainfall = false;
+    foreach ($rainfallFields as $field) {
+        $raw = trim(post_string($field));
+        if ($raw === '') {
+            $rainfall[$field] = null;
+        } elseif (preg_match('/\A\d{1,5}(?:\.\d{1,2})?\z/', $raw) === 1 && (float) $raw <= 99999.99) {
+            $rainfall[$field] = (float) $raw;
+            $hasRainfall = true;
+        } else {
+            $rainfallValid = false;
+            $rainfall[$field] = null;
+        }
+    }
+
+    $sourceName = trim(post_string('source_name'));
+    $sourceUrl = trim(post_string('source_url'));
+    $observedInput = trim(post_string('observed_at'));
+    $sourceNameLength = preg_match_all('/./us', $sourceName);
+    $validSourceUrl = $sourceUrl === '' || (
+        filter_var($sourceUrl, FILTER_VALIDATE_URL) !== false
+        && in_array(strtolower((string) parse_url($sourceUrl, PHP_URL_SCHEME)), ['http', 'https'], true)
+        && strlen($sourceUrl) <= 500
+    );
+    $observedLocal = DateTimeImmutable::createFromFormat(
+        '!Y-m-d\\TH:i:s',
+        $observedInput,
+        new DateTimeZone('Asia/Manila')
+    );
+    $dateErrors = DateTimeImmutable::getLastErrors();
+    $observedValid = $observedLocal !== false
+        && ($dateErrors === false || ($dateErrors['warning_count'] === 0 && $dateErrors['error_count'] === 0))
+        && $observedLocal->format('Y-m-d\\TH:i:s') === $observedInput;
+
+    if ($invalidReadingId || (!$existing && $readingId)) {
+        flash('reading_message', 'The reading was not found.');
+        redirect_to('readings.php');
+    }
+    if ($existing && (int) $existing['is_archived'] === 1) {
+        flash('reading_message', 'Restore an archived reading before editing it.');
+        redirect_to('readings.php');
+    }
+    if (!$locationAllowed || !$rainfallValid || !$hasRainfall
+        || $sourceNameLength === false || $sourceNameLength < 1 || $sourceNameLength > 150
+        || !$validSourceUrl || !$observedValid) {
+        flash('reading_message', 'Choose an active location, enter at least one valid rainfall value, source name, and valid observation time.');
+        redirect_to('readings.php');
+    }
+
+    $readingData = $rainfall + [
+        'location_id' => (int) $locationId,
+        'source_name' => $sourceName,
+        'source_url' => $sourceUrl === '' ? null : $sourceUrl,
+        'observed_at' => $observedLocal->setTimezone(new DateTimeZone('UTC'))->format('Y-m-d H:i:s'),
+    ];
+
     try {
         if ($readingId && $readingId > 0) {
             $saved = $readingRepository->update((int) $readingId, $readingData);

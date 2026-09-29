@@ -1,4 +1,4 @@
- <?php
+<?php
 declare(strict_types=1);
 
 require_once __DIR__ . '/../../app/bootstrap.php';
@@ -61,7 +61,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if ($invalidLocationId || $nameLength === false || $nameLength < 1 || $nameLength > 150
         || $zoneLength === false || $zoneLength > 100
-        || $landmarkLength === false || $landmarkLength > 255       
+        || $landmarkLength === false || $landmarkLength > 255
         || $sourceNameLength === false || $sourceNameLength > 150
         || !$latitudeValid || !$longitudeValid
         || (($latitude === null) !== ($longitude === null))

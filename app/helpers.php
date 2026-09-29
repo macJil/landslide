@@ -6,6 +6,12 @@ function e($value): string
     return htmlspecialchars((string) $value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
 }
 
+function post_string(string $key): string
+{
+    $value = $_POST[$key] ?? '';
+    return is_string($value) ? $value : '';
+}
+
 function csrf_token(): string
 {
     if (empty($_SESSION['csrf_token'])) {

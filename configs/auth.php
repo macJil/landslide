@@ -19,7 +19,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['login'])) {
     }
 
     session_regenerate_id(true);
-    unset($_SESSION['csrf_token']);
+    // Discard anonymous session state before assigning authenticated identity.
+    $_SESSION = [];
     $_SESSION['user_id'] = (int) $user['user_id'];
     $_SESSION['full_name'] = $user['full_name'];
     $_SESSION['username'] = $user['username'];

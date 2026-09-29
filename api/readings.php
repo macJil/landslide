@@ -1,0 +1,38 @@
+<?php
+declare(strict_types=1);
+
+header('Content-Type: application/json; charset=utf-8');
+header('Cache-Control: no-store, max-age=0');
+
+function respond_json(int $status, array $payload): void
+{
+    http_response_code($status);
+    echo json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_INVALID_UTF8_SUBSTITUTE);
+    exit;
+}
+
+if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
+    header('Allow: GET');
+    respond_json(405, ['error' => 'method_not_allowed']);
+}
+
+$rawLocationId = $_GET['location_id'] ?? null;
+$locationId = is_string($rawLocationId)
+    ? filter_var($rawLocationId, FILTER_VALIDATE_INT)
+    : false;
+if ($locationId === false || $locationId === null || $locationId < 1) {
+    respond_json(400, ['error' => 'invalid_location_id']);
+}
+
+require_once __DIR__ . '/../app/Database.php';
+require_once __DIR__ . '/../app/ReadingRepository.php';
+
+try {
+    $config = require __DIR__ . '/../configs/config.php';
+    $pdo = Database::connect($config);
+    $reading = (new ReadingRepository($pdo))->latestForActiveLocation((int) $locationId);
+    respond_json(200, ['data' => $reading]);
+} catch (PDOException $exception) {
+    error_log('SmartSlope reading API failed: ' . $exception->getMessage());
+    respond_json(503, ['error' => 'service_unavailable']);
+}

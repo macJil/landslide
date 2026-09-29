@@ -5,18 +5,7 @@ include("../configs/add_user.php");
 ?>
 <!DOCTYPE html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Landslide</title>
-    <link rel="stylesheet" href="<?php __DIR__?> /assets/css/bootstrap.min.css">
-    <script src="<?php __DIR__?> /assets/js/bootstrap.bundle.js"></script>
-</head>
-<header class="nav" style="background-color: aliceblue; display: flex; justify-content: space-between; align-items: center; padding: 10px 20px;">
-    <h1>BARANGAY IRISAN (Baguio City) - Landslide Warning System</h1>
-    
-</header>
-
+<?php include("../components/header.html") ?>
 <body>
     <div class="container" style="width: 900px; align-items:center; text-align: center" >
         <h4>Register Page</h4>
@@ -30,28 +19,33 @@ include("../configs/add_user.php");
             <input type="hidden" name="csrf_token" value="<?= e(csrf_token()) ?>">
             <table class="table table-borderless">
                 <tr>
-                    <th>Enter Username</th>
+                    <th scope="row"><label for="username">Enter Username</label></th>
                     <td>
-                        <input type="text" name="username" id="" class="form-control">
+                        <input type="text" name="username" id="username" class="form-control"
+                            minlength="3" maxlength="50" pattern="[A-Za-z0-9._-]{3,50}"
+                            autocomplete="username" required>
                     </td>
                 </tr>
                 <tr>
-                    <th>Enter Full Name</th>
+                    <th scope="row"><label for="full_name">Enter Full Name</label></th>
                     <td>
-                        <input type="text" name="full_name" id="" class="form-control">
+                        <input type="text" name="full_name" id="full_name" class="form-control"
+                            maxlength="100" autocomplete="name" required>
                     </td>
                 </tr>
                
                 <tr>
-                    <th>Enter Email</th>
+                    <th scope="row"><label for="email">Enter Email</label></th>
                     <td>
-                        <input type="email" name="email" id="" class="form-control">
+                        <input type="email" name="email" id="email" class="form-control"
+                            maxlength="254" autocomplete="email" required>
                     </td>
                 </tr>
                 <tr>
-                    <th>Enter Password</th>
+                    <th scope="row"><label for="password">Enter Password</label></th>
                     <td>
-                        <input type="password" name="password" id="" class="form-control" minlength="8" maxlength="72" required>
+                        <input type="password" name="password" id="password" class="form-control"
+                            minlength="8" maxlength="72" autocomplete="new-password" required>
                     </td>
                 </tr>
             </table>

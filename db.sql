@@ -1,3 +1,4 @@
+
 -- SmartSlope academic MVP database
 -- Target: MySQL 8.0+ / MariaDB 10.4+
 -- Fresh-install script. It creates a NEW database named smartslope_mvp and
@@ -94,38 +95,6 @@ CREATE TABLE IF NOT EXISTS locations (
 CREATE TABLE IF NOT EXISTS readings (
     reading_id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
     location_id INT UNSIGNED NOT NULL,
-    rainfall_1h_mm DECIMAL(7, 2) NULL,
-    rainfall_24h_mm DECIMAL(7, 2) NULL,
-    rainfall_72h_mm DECIMAL(7, 2) NULL,
-    risk_level ENUM('low', 'normal', 'medium', 'high') NOT NULL,
-    source_name VARCHAR(150) NOT NULL,
-    source_url VARCHAR(500) NULL,
-    observed_at DATETIME NOT NULL,
-    recorded_by_user_id INT UNSIGNED NULL,
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    PRIMARY KEY (reading_id),
-    UNIQUE KEY uq_reading_source_time (location_id, observed_at, source_name),
-    KEY idx_readings_latest (location_id, observed_at, reading_id),
-    KEY idx_readings_recorded_by (recorded_by_user_id),
-    CONSTRAINT fk_readings_location
-        FOREIGN KEY (location_id) REFERENCES locations (location_id)
-        ON UPDATE CASCADE ON DELETE RESTRICT,
-    CONSTRAINT fk_readings_recorded_by
-        FOREIGN KEY (recorded_by_user_id) REFERENCES users (user_id)
-        ON UPDATE CASCADE ON DELETE SET NULL,
-    CONSTRAINT chk_readings_rainfall_present CHECK (
-        rainfall_1h_mm IS NOT NULL OR rainfall_24h_mm IS NOT NULL
-        OR rainfall_72h_mm IS NOT NULL
-    ),
-    CONSTRAINT chk_readings_rainfall_1h CHECK (
-        rainfall_1h_mm IS NULL OR rainfall_1h_mm >= 0
-    ),
-    CONSTRAINT chk_readings_rainfall_24h CHECK (
-        rainfall_24h_mm IS NULL OR rainfall_24h_mm >= 0
-    ),
-    CONSTRAINT chk_readings_rainfall_72h CHECK (
-        rainfall_72h_mm IS NULL OR rainfall_72h_mm >= 0
-    )
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- 5. Community reports and their admin review state.

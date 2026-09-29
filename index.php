@@ -39,10 +39,12 @@ include("./configs/auth.php");
                 </div>
                 <div class="body">
                     <div class="form-control ">
-                        <label for="" >Username:</label><br>
-                        <input type="text" name="username" class="form-control"><br>
-                        <label for="" class="form">Password:</label><br>
-                        <input type="password" name="password" class="form-control"><br>
+                        <label for="username">Username:</label><br>
+                        <input type="text" id="username" name="username" class="form-control"
+                            maxlength="50" autocomplete="username" required><br>
+                        <label for="password" class="form">Password:</label><br>
+                        <input type="password" id="password" name="password" class="form-control"
+                            autocomplete="current-password" required><br>
                       
                     </div>
                 </div>

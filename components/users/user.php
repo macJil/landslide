@@ -4,6 +4,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/../../app/bootstrap.php';
 require_user();
 $reportLocations = (new ReportRepository($pdo))->activeLocations();
+$riskLocations = (new LocationRepository($pdo))->activeForStudyArea();
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -39,5 +40,7 @@ $reportLocations = (new ReportRepository($pdo))->activeLocations();
     </div>
 </main>
 <?php include __DIR__ . '/../footer.html'; ?>
+<script src="../../assets/js/vendor/jquery.min.js"></script>
+<script src="../../assets/js/app.js"></script>
 </body>
 </html>

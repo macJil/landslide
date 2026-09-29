@@ -2,7 +2,7 @@
 declare(strict_types=1);
 
 // PHP does not load .env files automatically. This small INI read keeps local
-// XAMPP configuration dependency-free; real server environment variables win.
+// configuration dependency-free; real server environment variables win.
 $root = dirname(__DIR__);
 $fileValues = [];
 $envFile = $root . DIRECTORY_SEPARATOR . '.env';

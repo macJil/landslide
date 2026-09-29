@@ -62,7 +62,6 @@ final class ReportRepository
              INNER JOIN locations AS l ON l.location_id = r.location_id
              LEFT JOIN users AS reporter ON reporter.user_id = r.reported_by_user_id
              LEFT JOIN users AS reviewer ON reviewer.user_id = r.reviewed_by_user_id';
-
         $parameters = [];
         if ($status !== null && in_array($status, ['pending', 'reviewed', 'resolved'], true)) {
             $sql .= ' WHERE r.status = :status';

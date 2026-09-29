@@ -14,12 +14,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['register'])) {
     $email = trim((string) ($_POST['email'] ?? ''));
     $password = (string) ($_POST['password'] ?? '');
 
-    if ($fullName === '' || strlen($fullName) > 100 || $username === '' || strlen($username) > 50
-        || strlen($email) > 254 || !filter_var($email, FILTER_VALIDATE_EMAIL)
-        || strlen($password) < 8 || strlen($password) > 72) {
-        flash('register_error', 'Enter a name, username, valid email, and password between 8 and 72 characters.');
+    // Count Unicode characters for names while keeping usernames ASCII and predictable.
+    $fullNameLength = preg_match_all('/./us', $fullName);
+    $validUsername = preg_match('/\A[A-Za-z0-9._-]{3,50}\z/', $username) === 1;
+    $validEmail = strlen($email) <= 254
+        && filter_var($email, FILTER_VALIDATE_EMAIL) !== false;
+    $validPasswordLength = strlen($password) >= 8 && strlen($password) <= 72;
+
+    if ($fullNameLength === false || $fullNameLength < 1 || $fullNameLength > 100
+        || !$validUsername || !$validEmail || !$validPasswordLength) {
+        flash(
+            'register_error',
+            'Use a name up to 100 characters, a 3–50 character username (letters, numbers, dot, underscore, or hyphen), a valid email, and a password of 8–72 bytes.'
+        );
         redirect_to('register.php');
     }
+
+    $email = strtolower($email);
 
     try {
         (new UserRepository($pdo))->create($fullName, $username, $email, $password);

@@ -1,88 +1,43 @@
 <?php
-session_start();
+declare(strict_types=1);
 
-// Handle logout only if explicitly requested
-if (isset($_GET['logout']) && $_GET['logout'] === 'true') {
-    session_destroy();
-    header("Location: /landslide/index.php");
-    exit;
-}
-
-// Redirect if no active session
-if (empty($_SESSION['USERNAME'])) {
-    header("Location: /landslide/index.php");
-    exit;
-}
+require_once __DIR__ . '/../../app/bootstrap.php';
+require_user();
+$reportLocations = (new ReportRepository($pdo))->activeLocations();
 ?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Landslide</title>
+    <title>SmartSlope Resident</title>
     <link rel="stylesheet" href="../../assets/css/bootstrap.min.css">
-    <script src="../../assets/js/bootstrap.bundle.js"></script>
+    <script src="../../assets/js/bootstrap.bundle.js" defer></script>
 </head>
-<header class="nav" style="background-color: aliceblue; display: flex; justify-content: space-between; align-items: center; padding: 10px 20px;">
-    <h1>BARANGAY IRISAN (Baguio City) - Landslide Warning System</h1>
-    <div>
-        <ul class="nav justify-content-end" style="display: flex; list-style: none; margin: 0; padding: 0; gap: 15px;">
-            <li class="nav-item">
-                <a class="btn btn-outline-danger" aria-current="page" href="">User Mode</a>
-            </li>
-            <li class="nav-item">
-                <!-- Switch button triggers JS confirm -->
-                <button class="btn btn-outline-primary" onclick="confirmLogout()">Switch to Admin</button>
-            </li>
-        </ul>
-    </div>
+<body>
+<header class="nav" style="background-color: aliceblue; display:flex; justify-content:space-between; align-items:center; padding:10px 20px;">
+    <h1>Barangay Irisan (Baguio City) — SmartSlope</h1>
+    <form action="../../configs/logout.php" method="post">
+        <input type="hidden" name="csrf_token" value="<?= e(csrf_token()) ?>">
+        <button class="btn btn-outline-danger" type="submit">Log out</button>
+    </form>
 </header>
 
-<body>
-    <div class="container">
-        <h1>Welcome User</h1>
-        <table class="table table-borderless">
-            <tr>
-                <th>User Name</th>
-                <th>Full Name</th>
-                <th>Email</th>
-                <th>Password</th>
-                <th>Role</th>
-                <th>Created At</th>
-            </tr>
-            <tr>
-                <td><?php echo $_SESSION['USERNAME']?></td>
-                <td><?php echo $_SESSION['FULL_NAME']?></td>
-                <td><?php echo $_SESSION['EMAIL']?></td>
-                <td><?php echo $_SESSION['PASSWORD']?></td>
-                <td><?php echo $_SESSION['ROLE']?></td>
-                <td><?php echo $_SESSION['CREATED_AT']?></td>
-            </tr>
-        </table>
-    </div>
-    <div class="container text-center">
-        <div class="row align-items-start">
-            <div class="col">
-                <?php include("risk_area.php")?>
-            </div>
-            <div class="col">
-                <?php include("report.php")?>
-            </div>
-           
-        </div>
-    </div>
-    <script>
-        function confirmLogout() {
-            let userChoice = confirm('Are you sure you want to Log out?');
-            if (userChoice) {
-                // Redirect with logout flag
-                window.location.href = "?logout=true";
-            } else {
-                // Do nothing, stay on the page
-            }
-        }
-    </script>
-</body>
+<main class="container my-4">
+    <h2>Welcome, <?= e($_SESSION['full_name'] ?? 'Resident') ?></h2>
+    <p>Signed in as <?= e($_SESSION['username'] ?? '') ?></p>
 
-<?php include("../footer.html"); ?>
+    <?php if ($message = flash('report_success')): ?>
+        <div class="alert alert-success" role="status"><?= e($message) ?></div>
+    <?php elseif ($message = flash('report_error')): ?>
+        <div class="alert alert-danger" role="alert"><?= e($message) ?></div>
+    <?php endif; ?>
+
+    <div class="row g-3">
+        <div class="col-lg-6"><?php include __DIR__ . '/risk_area.php'; ?></div>
+        <div class="col-lg-6"><?php include __DIR__ . '/report.php'; ?></div>
+    </div>
+</main>
+<?php include __DIR__ . '/../footer.html'; ?>
+</body>
 </html>

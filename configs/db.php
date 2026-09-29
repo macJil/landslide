@@ -1,7 +1,4 @@
 <?php
-    $conn = mysqli_connect("localhost","root","root","smartslope_mvp");
-    if(!$conn){
-        echo "ERROR!";
-    }
+declare(strict_types=1);
 
-?>
+require_once dirname(__DIR__) . '/app/bootstrap.php';

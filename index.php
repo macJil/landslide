@@ -25,7 +25,14 @@ include("./configs/auth.php");
     
     <div class="container" style="width: 300px; align-items:center;text-align:center">
         <h4>Login Page</h4>
+        <?php if ($message = flash('login_error')): ?>
+            <div class="alert alert-danger" role="alert"><?= e($message) ?></div>
+        <?php endif; ?>
+        <?php if ($message = flash('register_success')): ?>
+            <div class="alert alert-success" role="alert"><?= e($message) ?></div>
+        <?php endif; ?>
         <form action="" method="post">
+            <input type="hidden" name="csrf_token" value="<?= e(csrf_token()) ?>">
             <div class="card" >
                 <div class="card-header">
                     <p>Enter credentials</p>

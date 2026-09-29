@@ -5,11 +5,29 @@ include("../configs/add_user.php");
 ?>
 <!DOCTYPE html>
 <html lang="en">
-<?php include("../components/header.html") ?>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Landslide</title>
+    <link rel="stylesheet" href="<?php __DIR__?> /assets/css/bootstrap.min.css">
+    <script src="<?php __DIR__?> /assets/js/bootstrap.bundle.js"></script>
+</head>
+<header class="nav" style="background-color: aliceblue; display: flex; justify-content: space-between; align-items: center; padding: 10px 20px;">
+    <h1>BARANGAY IRISAN (Baguio City) - Landslide Warning System</h1>
+    
+</header>
+
 <body>
     <div class="container" style="width: 900px; align-items:center; text-align: center" >
         <h4>Register Page</h4>
+        <?php if ($message = flash('register_error')): ?>
+            <div class="alert alert-danger" role="alert"><?= e($message) ?></div>
+        <?php endif; ?>
+        <?php if ($message = flash('register_success')): ?>
+            <div class="alert alert-success" role="alert"><?= e($message) ?></div>
+        <?php endif; ?>
         <form action="" method="post" class="form-control">
+            <input type="hidden" name="csrf_token" value="<?= e(csrf_token()) ?>">
             <table class="table table-borderless">
                 <tr>
                     <th>Enter Username</th>
@@ -33,22 +51,9 @@ include("../configs/add_user.php");
                 <tr>
                     <th>Enter Password</th>
                     <td>
-                        <input type="password" name="password" id="" class="form-control">
+                        <input type="password" name="password" id="" class="form-control" minlength="8" maxlength="72" required>
                     </td>
                 </tr>
-                <tr>
-                    <th>Enter Role</th>
-                    <td>
-                        <select type="text" name="role" id="" class="form-control">
-                            <option value="" disabled selected></option>
-                            <option value="admin">Admin</option>
-                            <option value="user">User</option>
-                        </select>
-                        
-                    </td>
-                </tr>
-                
-
             </table>
             <button class="btn btn-outline-success" name="register">Register</button>
             <a href="../index.php" class="btn btn-outline-danger">Cancel</a>

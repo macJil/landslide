@@ -1,0 +1,1477 @@
+diff --git a/.env b/.env
+deleted file mode 100644
+index e69de29..0000000
+diff --git a/.env.example b/.env.example
+index 5d84507..b07891b 100644
+--- a/.env.example
++++ b/.env.example
+@@ -1,6 +1,5 @@
+-DB_CONNECTION=sqlite
+ DB_HOST=127.0.0.1
+-DB_PORT=3308
+-DB_DATABASE=smartslope_mvp 
++DB_PORT=3306
++DB_DATABASE=smartslope_mvp
+ DB_USERNAME=root
+-DB_PASSWORD=root
++DB_PASSWORD=
+diff --git a/.gitignore b/.gitignore
+index e69de29..bc23879 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -0,0 +1,5 @@
++/.env
++/configs/config.local.php
++/vendor/
++.DS_Store
++Thumbs.db
+diff --git a/app/Database.php b/app/Database.php
+index e69de29..a99f287 100644
+--- a/app/Database.php
++++ b/app/Database.php
+@@ -0,0 +1,27 @@
++<?php
++declare(strict_types=1);
++
++final class Database
++{
++    /** @param array<string, mixed> $config */
++    public static function connect(array $config): PDO
++    {
++        $dsn = sprintf(
++            'mysql:host=%s;port=%d;dbname=%s;charset=utf8mb4',
++            $config['host'],
++            $config['port'],
++            $config['database']
++        );
++
++        $pdo = new PDO($dsn, $config['username'], $config['password'], [
++            PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
++            PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
++            PDO::ATTR_EMULATE_PREPARES => false,
++        ]);
++
++        // The schema stores observation times in UTC.
++        $pdo->exec("SET time_zone = '+00:00'");
++
++        return $pdo;
++    }
++}
+diff --git a/app/ReportRepository.php b/app/ReportRepository.php
+index e69de29..0fdc10d 100644
+--- a/app/ReportRepository.php
++++ b/app/ReportRepository.php
+@@ -0,0 +1,105 @@
++<?php
++declare(strict_types=1);
++
++final class ReportRepository
++{
++    private PDO $pdo;
++
++    public function __construct(PDO $pdo)
++    {
++        $this->pdo = $pdo;
++    }
++
++    public function activeLocations(): array
++    {
++        $statement = $this->pdo->query(
++            'SELECT l.location_id, l.location_name, l.purok_zone, l.landmark
++             FROM locations AS l
++             INNER JOIN barangays AS b ON b.barangay_id = l.barangay_id
++             WHERE l.is_active = 1 AND b.is_active = 1
++             ORDER BY l.location_name, l.purok_zone'
++        );
++
++        return $statement->fetchAll();
++    }
++
++    public function create(
++        int $locationId,
++        ?int $reporterId,
++        ?string $houseLandmark,
++        string $message
++    ): void {
++        $statement = $this->pdo->prepare(
++            'INSERT INTO reports
++                (location_id, reported_by_user_id, house_landmark, message)
++             SELECT l.location_id, :reporter_id, :house_landmark, :message
++             FROM locations AS l
++             INNER JOIN barangays AS b ON b.barangay_id = l.barangay_id
++             WHERE l.location_id = :location_id
++               AND l.is_active = 1 AND b.is_active = 1'
++        );
++        $statement->execute([
++            'reporter_id' => $reporterId,
++            'house_landmark' => $houseLandmark,
++            'message' => $message,
++            'location_id' => $locationId,
++        ]);
++
++        if ($statement->rowCount() !== 1) {
++            throw new InvalidArgumentException('The selected location is unavailable.');
++        }
++    }
++
++    public function adminQueue(?string $status = null): array
++    {
++        $sql =
++            'SELECT r.report_id, r.location_id, r.house_landmark, r.message,
++                    r.status, r.created_at, r.reviewed_at,
++                    l.location_name, l.purok_zone,
++                    reporter.full_name AS reporter_name,
++                    reviewer.full_name AS reviewer_name
++             FROM reports AS r
++             INNER JOIN locations AS l ON l.location_id = r.location_id
++             LEFT JOIN users AS reporter ON reporter.user_id = r.reported_by_user_id
++             LEFT JOIN users AS reviewer ON reviewer.user_id = r.reviewed_by_user_id';
++
++        $parameters = [];
++        if ($status !== null && in_array($status, ['pending', 'reviewed', 'resolved'], true)) {
++            $sql .= ' WHERE r.status = :status';
++            $parameters['status'] = $status;
++        }
++        $sql .= ' ORDER BY r.created_at DESC, r.report_id DESC';
++
++        $statement = $this->pdo->prepare($sql);
++        $statement->execute($parameters);
++        return $statement->fetchAll();
++    }
++
++    public function updateStatus(int $reportId, string $status, int $adminId): bool
++    {
++        if (!in_array($status, ['reviewed', 'resolved'], true)) {
++            return false;
++        }
++
++        $exists = $this->pdo->prepare('SELECT 1 FROM reports WHERE report_id = :report_id');
++        $exists->execute(['report_id' => $reportId]);
++        if (!$exists->fetchColumn()) {
++            return false;
++        }
++
++        $statement = $this->pdo->prepare(
++            'UPDATE reports
++             SET status = :status,
++                 reviewed_by_user_id = :admin_id,
++                 reviewed_at = UTC_TIMESTAMP()
++             WHERE report_id = :report_id'
++        );
++        $statement->execute([
++            'status' => $status,
++            'admin_id' => $adminId,
++            'report_id' => $reportId,
++        ]);
++
++        return true;
++    }
++}
+diff --git a/app/UserRepository.php b/app/UserRepository.php
+index e69de29..34deea3 100644
+--- a/app/UserRepository.php
++++ b/app/UserRepository.php
+@@ -0,0 +1,43 @@
++<?php
++declare(strict_types=1);
++
++final class UserRepository
++{
++    private PDO $pdo;
++
++    public function __construct(PDO $pdo)
++    {
++        $this->pdo = $pdo;
++    }
++
++    public function authenticate(string $username, string $password): ?array
++    {
++        $statement = $this->pdo->prepare(
++            'SELECT user_id, full_name, username, email, password_hash, role, created_at
++             FROM users WHERE username = :username LIMIT 1'
++        );
++        $statement->execute(['username' => $username]);
++        $user = $statement->fetch();
++
++        if (!$user || !password_verify($password, $user['password_hash'])) {
++            return null;
++        }
++
++        unset($user['password_hash']);
++        return $user;
++    }
++
++    public function create(string $fullName, string $username, string $email, string $password): void
++    {
++        $statement = $this->pdo->prepare(
++            "INSERT INTO users (full_name, username, email, password_hash, role)
++             VALUES (:full_name, :username, :email, :password_hash, 'user')"
++        );
++        $statement->execute([
++            'full_name' => $fullName,
++            'username' => $username,
++            'email' => $email,
++            'password_hash' => password_hash($password, PASSWORD_DEFAULT),
++        ]);
++    }
++}
+diff --git a/app/bootstrap.php b/app/bootstrap.php
+index e69de29..bcc1d9b 100644
+--- a/app/bootstrap.php
++++ b/app/bootstrap.php
+@@ -0,0 +1,30 @@
++<?php
++declare(strict_types=1);
++
++date_default_timezone_set('Asia/Manila');
++
++if (session_status() !== PHP_SESSION_ACTIVE) {
++    $isHttps = isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off';
++    session_set_cookie_params([
++        'httponly' => true,
++        'secure' => $isHttps,
++        'samesite' => 'Lax',
++        'path' => '/',
++    ]);
++    session_start();
++}
++
++require_once __DIR__ . '/Database.php';
++require_once __DIR__ . '/helpers.php';
++require_once __DIR__ . '/UserRepository.php';
++require_once __DIR__ . '/ReportRepository.php';
++
++$databaseConfig = require dirname(__DIR__) . '/configs/config.php';
++
++try {
++    $pdo = Database::connect($databaseConfig);
++} catch (PDOException $exception) {
++    error_log('SmartSlope database connection failed: ' . $exception->getMessage());
++    http_response_code(503);
++    exit('SmartSlope is temporarily unavailable. Check the local database configuration.');
++}
+diff --git a/app/helpers.php b/app/helpers.php
+index e69de29..0521a3c 100644
+--- a/app/helpers.php
++++ b/app/helpers.php
+@@ -0,0 +1,72 @@
++<?php
++declare(strict_types=1);
++
++function e($value): string
++{
++    return htmlspecialchars((string) $value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
++}
++
++function csrf_token(): string
++{
++    if (empty($_SESSION['csrf_token'])) {
++        $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
++    }
++
++    return $_SESSION['csrf_token'];
++}
++
++function csrf_is_valid(mixed $token): bool
++{
++    return is_string($token)
++        && isset($_SESSION['csrf_token'])
++        && hash_equals($_SESSION['csrf_token'], $token);
++}
++
++function flash(string $key, ?string $message = null): ?string
++{
++    if ($message !== null) {
++        $_SESSION['flash'][$key] = $message;
++        return null;
++    }
++
++    $value = $_SESSION['flash'][$key] ?? null;
++    unset($_SESSION['flash'][$key]);
++    return is_string($value) ? $value : null;
++}
++
++function redirect_to(string $path): void
++{
++    header('Location: ' . $path, true, 303);
++    exit;
++}
++
++function display_local_datetime(?string $value): string
++{
++    if ($value === null || $value === '') {
++        return '';
++    }
++
++    $date = DateTimeImmutable::createFromFormat(
++        'Y-m-d H:i:s',
++        $value,
++        new DateTimeZone('UTC')
++    );
++
++    return $date
++        ? $date->setTimezone(new DateTimeZone('Asia/Manila'))->format('M j, Y g:i A')
++        : $value;
++}
++
++function require_user(): void
++{
++    if (empty($_SESSION['user_id']) || ($_SESSION['role'] ?? '') !== 'user') {
++        redirect_to('../../index.php');
++    }
++}
++
++function require_admin(): void
++{
++    if (empty($_SESSION['user_id']) || ($_SESSION['role'] ?? '') !== 'admin') {
++        redirect_to('../../index.php');
++    }
++}
+diff --git a/components/admins/admin.php b/components/admins/admin.php
+index 45727ec..b461d47 100644
+--- a/components/admins/admin.php
++++ b/components/admins/admin.php
+@@ -1,117 +1,37 @@
+ <?php
+-session_start();
++declare(strict_types=1);
+ 
+-// Handle logout only if explicitly requested
+-if (isset($_GET['logout']) && $_GET['logout'] === 'true') {
+-    session_destroy();
+-    header("Location: /landslide/index.php");
+-    exit;
+-}
+-
+-// Redirect if no active session
+-if (empty($_SESSION['USERNAME'])) {
+-    header("Location: /landslide/index.php");
+-    exit;
++require_once __DIR__ . '/../../app/bootstrap.php';
++require_admin();
++$adminReportFilter = (string) ($_GET['status'] ?? '');
++if (!in_array($adminReportFilter, ['', 'pending', 'reviewed', 'resolved'], true)) {
++    $adminReportFilter = '';
+ }
++$adminReports = (new ReportRepository($pdo))->adminQueue(
++    $adminReportFilter === '' ? null : $adminReportFilter
++);
+ ?>
+ <!DOCTYPE html>
+ <html lang="en">
+ <head>
+     <meta charset="UTF-8">
+     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+-    <title>Landslide</title>
++    <title>SmartSlope Admin</title>
+     <link rel="stylesheet" href="../../assets/css/bootstrap.min.css">
+-    <script src="../../assets/js/bootstrap.bundle.js"></script>
++    <script src="../../assets/js/bootstrap.bundle.js" defer></script>
+ </head>
+-<header class="nav" style="background-color: aliceblue; display: flex; justify-content: space-between; align-items: center; padding: 10px 20px;">
+-    <h1>Landslide Alert System</h1>
+-    <div>
+-        <ul class="nav justify-content-end" style="display: flex; list-style: none; margin: 0; padding: 0; gap: 15px;">
+-            <li class="nav-item">
+-                <a class="btn btn-outline-danger" aria-current="page" href="">Admin Mode</a>
+-            </li>
+-            <li class="nav-item">
+-                <!-- Switch button triggers JS confirm -->
+-                <button class="btn btn-outline-primary" onclick="confirmLogout()">Switch to User</button>
+-            </li>
+-        </ul>
+-    </div>
+-</header>
+-
+ <body>
+-    <div class="container">
+-        <h1>Welcome User</h1>
+-        <table class="table table-borderless">
+-            <tr>
+-                <th>User Name</th>
+-                <th>Full Name</th>
+-                <th>Email</th>
+-                <th>Password</th>
+-                <th>Role</th>
+-                <th>Created At</th>
+-            </tr>
+-            <tr>
+-                <td><?php echo $_SESSION['USERNAME']?></td>
+-                <td><?php echo $_SESSION['FULL_NAME']?></td>
+-                <td><?php echo $_SESSION['EMAIL']?></td>
+-                <td><?php echo $_SESSION['PASSWORD']?></td>
+-                <td><?php echo $_SESSION['ROLE']?></td>
+-                <td><?php echo $_SESSION['CREATED_AT']?></td>
+-            </tr>
+-        </table>
+-    </div>
+-    <div class="container text-center">
+-        <div class="row align-items-start">
+-            <div class="col">
+-                <?php include("add_location.php")?>
+-            </div>
+-            <div class="col">
+-                <?php include("reports.php")?>
+-            </div>
+-           
+-        </div>
+-    </div>
+-    <div class="container" style="margin-top: 10px; margin-bottom:100px;">
+-        <h4 style="text-align: center;">Historical Environmental Logs</h4>
+-        <form action="" method="post">
+-            <table class="table table-borderless">
+-                <tr>
+-                    <th>Log ID</th>
+-                    <th>Recorded Time</th>
+-                    <th>Location</th>
+-                    <th>Rain Rate</th>
+-                    <th>Soil Sat.</th>
+-                    <th>Risk</th>
+-                    <th>Action</th>
+-                </tr>
+-                <tr>
+-                    <td>Sample</td>
+-                    <td>Sample</td>
+-                    <td>Sample</td>
+-                    <td>Sample</td>
+-                    <td>Sample</td>
+-                    <td>Sample</td>
+-                    <td>
+-                        <a href="">Update</a>
+-                        <button>Delete</button>
+-                    </td>
+-                </tr>
+-            </table>
+-        </form>
+-    </div>
+-
+-    <script>
+-        function confirmLogout() {
+-            let userChoice = confirm('Are you sure you want to Log out?');
+-            if (userChoice) {
+-                // Redirect with logout flag
+-                window.location.href = "?logout=true";
+-            } else {
+-                // Do nothing, stay on the page
+-            }
+-        }
+-    </script>
++<header class="nav" style="background-color: aliceblue; display:flex; justify-content:space-between; align-items:center; padding:10px 20px;">
++    <h1>SmartSlope — Report Review</h1>
++    <form action="../../configs/logout.php" method="post">
++        <input type="hidden" name="csrf_token" value="<?= e(csrf_token()) ?>">
++        <button class="btn btn-outline-danger" type="submit">Log out</button>
++    </form>
++</header>
++<main class="container my-4">
++    <h2>Welcome, <?= e($_SESSION['full_name'] ?? 'Administrator') ?></h2>
++    <?php include __DIR__ . '/reports.php'; ?>
++</main>
++<?php include __DIR__ . '/../footer.html'; ?>
+ </body>
+-
+-<?php include("../footer.html"); ?>
+ </html>
+diff --git a/components/admins/reports.php b/components/admins/reports.php
+index b066b19..a0e1e77 100644
+--- a/components/admins/reports.php
++++ b/components/admins/reports.php
+@@ -1,31 +1,63 @@
+-<div class="conteiner">
+-    <div class="card">
+-        <div class="card-header">
+-            <main>Resident Ground Reports</main>
+-        </div>
+-        <div class="card-body">
+-            <form action="" method="post">
+-                <table class="table table-bordered">
+-                    <tr>
+-                        <th>Reporter</th>
+-                        <th>Location</th>
+-                        <th>Status</th>
+-                        <th>Action</th>
+-                    </tr>
++<section class="card mt-4">
++    <div class="card-header"><h3 class="h5 mb-0">Resident reports</h3></div>
++    <div class="card-body">
++        <?php if ($message = flash('admin_report_message')): ?>
++            <div class="alert alert-info" role="status"><?= e($message) ?></div>
++        <?php endif; ?>
++        <form method="get" action="admin.php" class="row g-2 mb-3">
++            <div class="col-auto">
++                <label class="form-label" for="report-status-filter">Filter by status</label>
++                <select class="form-select" id="report-status-filter" name="status">
++                    <option value="" <?= $adminReportFilter === '' ? 'selected' : '' ?>>All reports</option>
++                    <option value="pending" <?= $adminReportFilter === 'pending' ? 'selected' : '' ?>>Pending</option>
++                    <option value="reviewed" <?= $adminReportFilter === 'reviewed' ? 'selected' : '' ?>>Reviewed</option>
++                    <option value="resolved" <?= $adminReportFilter === 'resolved' ? 'selected' : '' ?>>Resolved</option>
++                </select>
++            </div>
++            <div class="col-auto align-self-end"><button class="btn btn-secondary" type="submit">Filter</button></div>
++        </form>
++        <div class="table-responsive">
++            <table class="table table-bordered align-middle">
++                <thead>
+                     <tr>
+-                        <td>Sample</td>
+-                        <td>Sample</td>
+-                        <td>Sample</td>
+-                        <td>
+-                            <a href="">Review</a>
+-                            <button>delete</button>
+-                        </td>
++                        <th>Reporter</th><th>Location</th><th>Observation</th>
++                        <th>Status</th><th>Submitted</th><th>Update</th>
+                     </tr>
+-                </table>
+-            </form>
+-        </div>
+-        <div class="card-footer">
+-
++                </thead>
++                <tbody>
++                    <?php foreach ($adminReports as $report): ?>
++                        <tr>
++                            <td><?= e($report['reporter_name'] ?: 'Anonymous') ?></td>
++                            <td>
++                                <?= e($report['location_name']) ?>
++                                <?php if ($report['purok_zone']): ?><br><small><?= e($report['purok_zone']) ?></small><?php endif; ?>
++                                <?php if ($report['house_landmark']): ?><br><small>Near: <?= e($report['house_landmark']) ?></small><?php endif; ?>
++                            </td>
++                            <td><?= nl2br(e($report['message'])) ?></td>
++                            <td><?= e(ucfirst($report['status'])) ?></td>
++                            <td><?= e(display_local_datetime($report['created_at'])) ?></td>
++                            <td>
++                                <?php if ($report['status'] !== 'resolved'): ?>
++                                    <form action="update_report.php" method="post" class="d-flex gap-2">
++                                        <input type="hidden" name="csrf_token" value="<?= e(csrf_token()) ?>">
++                                        <input type="hidden" name="report_id" value="<?= (int) $report['report_id'] ?>">
++                                        <select name="status" class="form-select" aria-label="New report status">
++                                            <option value="reviewed" <?= $report['status'] === 'reviewed' ? 'selected' : '' ?>>Reviewed</option>
++                                            <option value="resolved">Resolved</option>
++                                        </select>
++                                        <button class="btn btn-primary" type="submit">Save</button>
++                                    </form>
++                                <?php else: ?>
++                                    <?= $report['reviewed_at'] ? 'Reviewed ' . e(display_local_datetime($report['reviewed_at'])) : 'Resolved' ?>
++                                <?php endif; ?>
++                            </td>
++                        </tr>
++                    <?php endforeach; ?>
++                    <?php if (!$adminReports): ?>
++                        <tr><td colspan="6" class="text-center">No reports have been submitted.</td></tr>
++                    <?php endif; ?>
++                </tbody>
++            </table>
+         </div>
+     </div>
+-</div>
+\ No newline at end of file
++</section>
+diff --git a/components/admins/update_report.php b/components/admins/update_report.php
+new file mode 100644
+index 0000000..5faac56
+--- /dev/null
++++ b/components/admins/update_report.php
+@@ -0,0 +1,38 @@
++<?php
++declare(strict_types=1);
++
++require_once __DIR__ . '/../../app/bootstrap.php';
++require_admin();
++
++if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
++    http_response_code(405);
++    header('Allow: POST');
++    exit('Method not allowed.');
++}
++
++if (!csrf_is_valid($_POST['csrf_token'] ?? null)) {
++    flash('admin_report_message', 'Your session expired. Reload the page and try again.');
++    redirect_to('admin.php');
++}
++
++$reportId = filter_var($_POST['report_id'] ?? null, FILTER_VALIDATE_INT);
++$status = (string) ($_POST['status'] ?? '');
++
++if (!$reportId || !in_array($status, ['reviewed', 'resolved'], true)) {
++    flash('admin_report_message', 'The report update was not valid.');
++    redirect_to('admin.php');
++}
++
++try {
++    $updated = (new ReportRepository($pdo))->updateStatus(
++        (int) $reportId,
++        $status,
++        (int) $_SESSION['user_id']
++    );
++    flash('admin_report_message', $updated ? 'Report status updated.' : 'The report was not found.');
++} catch (PDOException $exception) {
++    error_log('SmartSlope report status update failed: ' . $exception->getMessage());
++    flash('admin_report_message', 'The report status could not be updated.');
++}
++
++redirect_to('admin.php');
+diff --git a/components/footer.html b/components/footer.html
+index c871dff..9cc410a 100644
+--- a/components/footer.html
++++ b/components/footer.html
+@@ -1,3 +1,3 @@
+-<footer class="footer" style="background-color: aliceblue; text-align: center; width: 100%; position: fixed; left: 0; bottom: 0;">
++<footer class="footer" style="background-color: aliceblue; text-align: center; width: 100%; padding: 10px; margin-top: 24px;">
+     <p>Copyright</p>
+-</footer>
+\ No newline at end of file
++</footer>
+diff --git a/components/users/report.php b/components/users/report.php
+index a4d2d9c..85ce408 100644
+--- a/components/users/report.php
++++ b/components/users/report.php
+@@ -1,31 +1,34 @@
+-<div class="container">
+-    <div class="card">
+-        <div class="card-header">
+-            <main>SUBMIT GROUND REPORT / FEEDBACK</main>
+-        </div>
+-        <div class="card-body">
+-            <form action="" method="post" >
+-                <div class="form-floating mb-3">
+-                    <input type="text" class="form-control" id="floatingInput" placeholder="" name="name">
+-                    <label for="floatingInput">Resident Name</label>
+-                </div>
+-                <div class="form-floating">
+-                    <input type="text" class="form-control" id="floatingInput" placeholder="">
+-                    <label for="floatingInput">House No. / Landmark / Street:</label>
+-                </div>
+-                <div class="form-floating" style="margin-top: 5px;">
+-                    <textarea class="form-control" placeholder="Leave a comment here" id="floatingTextarea2" style="height: 100px"></textarea>
+-                    <label for="floatingTextarea2">Observation Details:</label>
+-                </div>
+-                <div class="container" style="margin-top: 5px; align-items:start; text-align:start; margin-left: -13px;">
+-                    <button class="btn btn-outline-warning">Submit Report</button>
+-                </div>
+-                
+-            </form>
+-        </div>
+-        <div class="card-footer">
+-
+-        </div>
++<section class="card">
++    <div class="card-header"><h3 class="h5 mb-0">Submit a ground report</h3></div>
++    <div class="card-body">
++        <p class="text-muted">Describe an observed ground or slope condition. Reports are reviewed by an administrator.</p>
++        <form action="submit_report.php" method="post">
++            <input type="hidden" name="csrf_token" value="<?= e(csrf_token()) ?>">
++            <div class="mb-3">
++                <label for="report-location" class="form-label">Location</label>
++                <select class="form-select" id="report-location" name="location_id" required>
++                    <option value="">Choose a location</option>
++                    <?php foreach ($reportLocations as $location): ?>
++                        <option value="<?= (int) $location['location_id'] ?>">
++                            <?= e($location['location_name']) ?><?= $location['purok_zone'] ? ' — ' . e($location['purok_zone']) : '' ?>
++                        </option>
++                    <?php endforeach; ?>
++                </select>
++                <?php if (!$reportLocations): ?>
++                    <div class="form-text">No active locations are available yet.</div>
++                <?php endif; ?>
++            </div>
++            <div class="form-floating mb-3">
++                <input type="text" class="form-control" id="house-landmark" name="house_landmark"
++                       maxlength="255" placeholder="House number, landmark, or street">
++                <label for="house-landmark">House number / landmark / street (optional)</label>
++            </div>
++            <div class="form-floating mb-3">
++                <textarea class="form-control" id="report-message" name="message" maxlength="2000"
++                          placeholder="Observation details" style="height:120px" required></textarea>
++                <label for="report-message">Observation details</label>
++            </div>
++            <button class="btn btn-warning" type="submit" <?= !$reportLocations ? 'disabled' : '' ?>>Submit report</button>
++        </form>
+     </div>
+-
+-</div>
+\ No newline at end of file
++</section>
+diff --git a/components/users/submit_report.php b/components/users/submit_report.php
+new file mode 100644
+index 0000000..d747986
+--- /dev/null
++++ b/components/users/submit_report.php
+@@ -0,0 +1,44 @@
++<?php
++declare(strict_types=1);
++
++require_once __DIR__ . '/../../app/bootstrap.php';
++require_user();
++
++if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
++    http_response_code(405);
++    header('Allow: POST');
++    exit('Method not allowed.');
++}
++
++if (!csrf_is_valid($_POST['csrf_token'] ?? null)) {
++    flash('report_error', 'Your session expired. Please reload the page and try again.');
++    redirect_to('user.php');
++}
++
++$locationId = filter_var($_POST['location_id'] ?? null, FILTER_VALIDATE_INT);
++$houseLandmark = trim((string) ($_POST['house_landmark'] ?? ''));
++$message = trim((string) ($_POST['message'] ?? ''));
++$messageLength = preg_match_all('/./us', $message, $matches);
++
++if (!$locationId || $message === '' || $messageLength === false || $messageLength > 2000
++    || strlen($houseLandmark) > 255) {
++    flash('report_error', 'Choose a location and enter a report of at most 2,000 characters.');
++    redirect_to('user.php');
++}
++
++try {
++    (new ReportRepository($pdo))->create(
++        (int) $locationId,
++        (int) $_SESSION['user_id'],
++        $houseLandmark === '' ? null : $houseLandmark,
++        $message
++    );
++    flash('report_success', 'Your report was submitted for administrator review.');
++} catch (InvalidArgumentException $exception) {
++    flash('report_error', 'That location is not available. Please choose an active location.');
++} catch (PDOException $exception) {
++    error_log('SmartSlope report submission failed: ' . $exception->getMessage());
++    flash('report_error', 'The report could not be submitted. Please try again.');
++}
++
++redirect_to('user.php');
+diff --git a/components/users/user.php b/components/users/user.php
+index eec32d3..0078bf2 100644
+--- a/components/users/user.php
++++ b/components/users/user.php
+@@ -1,88 +1,43 @@
+ <?php
+-session_start();
++declare(strict_types=1);
+ 
+-// Handle logout only if explicitly requested
+-if (isset($_GET['logout']) && $_GET['logout'] === 'true') {
+-    session_destroy();
+-    header("Location: /landslide/index.php");
+-    exit;
+-}
+-
+-// Redirect if no active session
+-if (empty($_SESSION['USERNAME'])) {
+-    header("Location: /landslide/index.php");
+-    exit;
+-}
++require_once __DIR__ . '/../../app/bootstrap.php';
++require_user();
++$reportLocations = (new ReportRepository($pdo))->activeLocations();
+ ?>
+ <!DOCTYPE html>
+ <html lang="en">
+ <head>
+     <meta charset="UTF-8">
+     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+-    <title>Landslide</title>
++    <title>SmartSlope Resident</title>
+     <link rel="stylesheet" href="../../assets/css/bootstrap.min.css">
+-    <script src="../../assets/js/bootstrap.bundle.js"></script>
++    <script src="../../assets/js/bootstrap.bundle.js" defer></script>
+ </head>
+-<header class="nav" style="background-color: aliceblue; display: flex; justify-content: space-between; align-items: center; padding: 10px 20px;">
+-    <h1>BARANGAY IRISAN (Baguio City) - Landslide Warning System</h1>
+-    <div>
+-        <ul class="nav justify-content-end" style="display: flex; list-style: none; margin: 0; padding: 0; gap: 15px;">
+-            <li class="nav-item">
+-                <a class="btn btn-outline-danger" aria-current="page" href="">User Mode</a>
+-            </li>
+-            <li class="nav-item">
+-                <!-- Switch button triggers JS confirm -->
+-                <button class="btn btn-outline-primary" onclick="confirmLogout()">Switch to Admin</button>
+-            </li>
+-        </ul>
+-    </div>
++<body>
++<header class="nav" style="background-color: aliceblue; display:flex; justify-content:space-between; align-items:center; padding:10px 20px;">
++    <h1>Barangay Irisan (Baguio City) — SmartSlope</h1>
++    <form action="../../configs/logout.php" method="post">
++        <input type="hidden" name="csrf_token" value="<?= e(csrf_token()) ?>">
++        <button class="btn btn-outline-danger" type="submit">Log out</button>
++    </form>
+ </header>
+ 
+-<body>
+-    <div class="container">
+-        <h1>Welcome User</h1>
+-        <table class="table table-borderless">
+-            <tr>
+-                <th>User Name</th>
+-                <th>Full Name</th>
+-                <th>Email</th>
+-                <th>Password</th>
+-                <th>Role</th>
+-                <th>Created At</th>
+-            </tr>
+-            <tr>
+-                <td><?php echo $_SESSION['USERNAME']?></td>
+-                <td><?php echo $_SESSION['FULL_NAME']?></td>
+-                <td><?php echo $_SESSION['EMAIL']?></td>
+-                <td><?php echo $_SESSION['PASSWORD']?></td>
+-                <td><?php echo $_SESSION['ROLE']?></td>
+-                <td><?php echo $_SESSION['CREATED_AT']?></td>
+-            </tr>
+-        </table>
+-    </div>
+-    <div class="container text-center">
+-        <div class="row align-items-start">
+-            <div class="col">
+-                <?php include("risk_area.php")?>
+-            </div>
+-            <div class="col">
+-                <?php include("report.php")?>
+-            </div>
+-           
+-        </div>
++<main class="container my-4">
++    <h2>Welcome, <?= e($_SESSION['full_name'] ?? 'Resident') ?></h2>
++    <p>Signed in as <?= e($_SESSION['username'] ?? '') ?></p>
++
++    <?php if ($message = flash('report_success')): ?>
++        <div class="alert alert-success" role="status"><?= e($message) ?></div>
++    <?php elseif ($message = flash('report_error')): ?>
++        <div class="alert alert-danger" role="alert"><?= e($message) ?></div>
++    <?php endif; ?>
++
++    <div class="row g-3">
++        <div class="col-lg-6"><?php include __DIR__ . '/risk_area.php'; ?></div>
++        <div class="col-lg-6"><?php include __DIR__ . '/report.php'; ?></div>
+     </div>
+-    <script>
+-        function confirmLogout() {
+-            let userChoice = confirm('Are you sure you want to Log out?');
+-            if (userChoice) {
+-                // Redirect with logout flag
+-                window.location.href = "?logout=true";
+-            } else {
+-                // Do nothing, stay on the page
+-            }
+-        }
+-    </script>
++</main>
++<?php include __DIR__ . '/../footer.html'; ?>
+ </body>
+-
+-<?php include("../footer.html"); ?>
+ </html>
+diff --git a/configs/add_user.php b/configs/add_user.php
+index bbd8b39..a1f2f0b 100644
+--- a/configs/add_user.php
++++ b/configs/add_user.php
+@@ -1,25 +1,37 @@
+ <?php
+-    include_once("config.php");
+-    include("db.php");
+-    
+-    if(isset($_POST['register'])){
+-        $timezone = new DateTimeZone('America/New_York');
+-        $now = new DateTimeImmutable('now', $timezone);
++declare(strict_types=1);
+ 
+-        $new_user = new users(
+-            
+-            $full_name = $_POST['full_name'],
+-            $username = $_POST['username'],
+-            $email = $_POST['email'],
+-            $password = $_POST['password'],
+-            $role = $_POST['role'],
+-            $created_at = $now->format('Y-m-d H:i:s'),
+-            
++require_once __DIR__ . '/db.php';
+ 
+-        );
+-        echo $new_user->add_user($conn);
+-        
+-        
++if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['register'])) {
++    if (!csrf_is_valid($_POST['csrf_token'] ?? null)) {
++        flash('register_error', 'Your session expired. Please try again.');
++        redirect_to('register.php');
+     }
+ 
+-?>
+\ No newline at end of file
++    $fullName = trim((string) ($_POST['full_name'] ?? ''));
++    $username = trim((string) ($_POST['username'] ?? ''));
++    $email = trim((string) ($_POST['email'] ?? ''));
++    $password = (string) ($_POST['password'] ?? '');
++
++    if ($fullName === '' || strlen($fullName) > 100 || $username === '' || strlen($username) > 50
++        || strlen($email) > 254 || !filter_var($email, FILTER_VALIDATE_EMAIL)
++        || strlen($password) < 8 || strlen($password) > 72) {
++        flash('register_error', 'Enter a name, username, valid email, and password between 8 and 72 characters.');
++        redirect_to('register.php');
++    }
++
++    try {
++        (new UserRepository($pdo))->create($fullName, $username, $email, $password);
++        flash('register_success', 'Account created. You can now sign in.');
++        redirect_to('register.php');
++    } catch (PDOException $exception) {
++        if ($exception->getCode() === '23000') {
++            flash('register_error', 'That username or email is already registered.');
++            redirect_to('register.php');
++        }
++        error_log('SmartSlope registration failed: ' . $exception->getMessage());
++        flash('register_error', 'The account could not be created. Please try again.');
++        redirect_to('register.php');
++    }
++}
+diff --git a/configs/auth.php b/configs/auth.php
+index 1f9fd9f..6fbc91f 100644
+--- a/configs/auth.php
++++ b/configs/auth.php
+@@ -1,15 +1,33 @@
+ <?php
+-    include_once("config.php");
+-    include("db.php");
+-    if(isset($_POST['login'])){
+-        session_start();
+-        
+-        $session_user = new temp_user(
+-            $username = $_POST['username'],
+-            $password = $_POST['password']
+-        );
+-    
+-        echo $session_user->add_user_session($conn);        
++declare(strict_types=1);
++
++require_once __DIR__ . '/db.php';
++
++if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['login'])) {
++    if (!csrf_is_valid($_POST['csrf_token'] ?? null)) {
++        flash('login_error', 'Your session expired. Please try again.');
++        redirect_to('index.php');
++    }
++
++    $username = trim((string) ($_POST['username'] ?? ''));
++    $password = (string) ($_POST['password'] ?? '');
++    $user = (new UserRepository($pdo))->authenticate($username, $password);
++
++    if ($user === null) {
++        flash('login_error', 'The username or password is incorrect.');
++        redirect_to('index.php');
+     }
+ 
+-?>
+\ No newline at end of file
++    session_regenerate_id(true);
++    unset($_SESSION['csrf_token']);
++    $_SESSION['user_id'] = (int) $user['user_id'];
++    $_SESSION['full_name'] = $user['full_name'];
++    $_SESSION['username'] = $user['username'];
++    $_SESSION['email'] = $user['email'];
++    $_SESSION['role'] = $user['role'];
++    $_SESSION['created_at'] = $user['created_at'];
++
++    redirect_to($user['role'] === 'admin'
++        ? 'components/admins/admin.php'
++        : 'components/users/user.php');
++}
+diff --git a/configs/config.php b/configs/config.php
+index 3887dee..9cf6812 100644
+--- a/configs/config.php
++++ b/configs/config.php
+@@ -1,89 +1,32 @@
+ <?php
+-
+-    class users
+-    {
+-        private string $full_name;
+-        private string $username;
+-        private string $email;
+-        private string $password;
+-        private string $role;
+-        private string $created_at;
+-       
+-       
+-
+-        public function __construct(string $full_name, string $username,string $email, string $password, string $role, string $created_at)
+-        {
+-            $this->full_name = $full_name;
+-            $this->username = $username;
+-            $this->full_name = $full_name;
+-            $this->email = $email;
+-            $this->password = $password;
+-            $this->role = $role;
+-            $this->created_at = $created_at;
+-
+-           
+-            
+-           
+-        }
+-       public function add_user($con){
+-            $sql = "INSERT INTO users (full_name, username, email, password, role, created_at)
+-                    VALUES ('$this->full_name', '$this->username', '$this->email', '$this->password', '$this->role', '$this->created_at')";
+-            
+-            $result = mysqli_query($con, $sql);
+-            if($result){
+-            
+-                    return "<script>alert('$this->full_name successfully Added...'); window.location.href='index.php'</script>";
+-                } else {
+-                    return "<script>alert('Unsuccessfully... Error or Invalid'); window.location.href='index.php'</script>";
+-            }
+-
+-       }
+-       public function get_info(){
+-            return $this->username ."<br>" . $this->created_at;
+-       }
+-       
++declare(strict_types=1);
++
++// PHP does not load .env files automatically. This small INI read keeps local
++// XAMPP configuration dependency-free; real server environment variables win.
++$root = dirname(__DIR__);
++$fileValues = [];
++$envFile = $root . DIRECTORY_SEPARATOR . '.env';
++
++if (is_file($envFile)) {
++    $parsed = parse_ini_file($envFile, false, INI_SCANNER_RAW);
++    if (is_array($parsed)) {
++        $fileValues = $parsed;
+     }
+-    class temp_user 
+-    {   
+-        private string $username;
+-        private string $password;
+-
+-       
+-        public function __construct( string $username,  string $password)
+-        {
+-            $this->username = $username;
+-            $this->password = $password;
+-        }
+-        public function add_user_session($con){
+-            if($result = mysqli_query($con, "SELECT * FROM users WHERE username = '$this->username' ")){
+-            while($row = mysqli_fetch_assoc($result)){
+-                if(($row['role'] === 'admin')&&($this->password === $row['password'])){
+-                    $_SESSION['USERNAME'] = $row['username'];
+-                    $_SESSION['FULL_NAME'] = $row['full_name'];
+-                    $_SESSION['EMAIL'] = $row['email'];
+-                    $_SESSION['PASSWORD'] = $row['password'];
+-                    $_SESSION['ROLE'] = $row['role'];
+-                    $_SESSION['CREATED_AT'] = $row['created_at'];
+-                    return "<script>alert('Admin Login Successfull!...'); window.location.href='components/admins/admin.php';</script>";
+-                } else if(($row['role'] === 'user')&&($this->password === $row['password'])){
+-                    $_SESSION['USERNAME'] = $row['username'];
+-                    $_SESSION['FULL_NAME'] = $row['full_name'];
+-                    $_SESSION['EMAIL'] = $row['email'];
+-                    $_SESSION['PASSWORD'] = $row['password'];
+-                    $_SESSION['ROLE'] = $row['role'];
+-                    $_SESSION['CREATED_AT'] = $row['created_at'];
+-                    return "<script>alert('User Login Successfull!...'); window.location.href='components/users/user.php';</script>";
+-                } else {
+-                    return "<script>alert('INVALID CREDENTIALS!'); window.location.href='index.php';</script>";
+-                }
+-            }
+-        } else {
+-            return "<script>alert('INVALID CREDENTIALS!...'); window.location.href='index.php';</script>";
+-        }
++}
+ 
+-        }
++$readSetting = static function (string $key, string $default) use ($fileValues): string {
++    $environmentValue = getenv($key);
++    if ($environmentValue !== false) {
++        return (string) $environmentValue;
+     }
+ 
++    return isset($fileValues[$key]) ? (string) $fileValues[$key] : $default;
++};
+ 
+-
+-?>
+\ No newline at end of file
++return [
++    'host' => $readSetting('DB_HOST', '127.0.0.1'),
++    'port' => (int) $readSetting('DB_PORT', '3306'),
++    'database' => $readSetting('DB_DATABASE', 'smartslope_mvp'),
++    'username' => $readSetting('DB_USERNAME', 'root'),
++    'password' => $readSetting('DB_PASSWORD', ''),
++];
+diff --git a/configs/db.php b/configs/db.php
+index 9404023..c87c944 100644
+--- a/configs/db.php
++++ b/configs/db.php
+@@ -1,7 +1,4 @@
+ <?php
+-    $conn = mysqli_connect("localhost","root","root","smartslope_mvp");
+-    if(!$conn){
+-        echo "ERROR!";
+-    }
++declare(strict_types=1);
+ 
+-?>
+\ No newline at end of file
++require_once dirname(__DIR__) . '/app/bootstrap.php';
+diff --git a/configs/logout.php b/configs/logout.php
+new file mode 100644
+index 0000000..59713dd
+--- /dev/null
++++ b/configs/logout.php
+@@ -0,0 +1,41 @@
++<?php
++declare(strict_types=1);
++
++date_default_timezone_set('Asia/Manila');
++if (session_status() !== PHP_SESSION_ACTIVE) {
++    $isHttps = isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off';
++    session_set_cookie_params([
++        'httponly' => true,
++        'secure' => $isHttps,
++        'samesite' => 'Lax',
++        'path' => '/',
++    ]);
++    session_start();
++}
++require_once __DIR__ . '/../app/helpers.php';
++
++if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
++    http_response_code(405);
++    header('Allow: POST');
++    exit('Method not allowed.');
++}
++
++if (!csrf_is_valid($_POST['csrf_token'] ?? null)) {
++    http_response_code(403);
++    exit('Invalid request token.');
++}
++
++$_SESSION = [];
++if (ini_get('session.use_cookies')) {
++    $parameters = session_get_cookie_params();
++    setcookie(session_name(), '', [
++        'expires' => time() - 42000,
++        'path' => $parameters['path'],
++        'domain' => $parameters['domain'],
++        'secure' => $parameters['secure'],
++        'httponly' => $parameters['httponly'],
++        'samesite' => 'Lax',
++    ]);
++}
++session_destroy();
++redirect_to('../index.php');
+diff --git a/configs/register.php b/configs/register.php
+index f85daee..cbcc7ec 100644
+--- a/configs/register.php
++++ b/configs/register.php
+@@ -9,7 +9,14 @@ include("../configs/add_user.php");
+ <body>
+     <div class="container" style="width: 900px; align-items:center; text-align: center" >
+         <h4>Register Page</h4>
++        <?php if ($message = flash('register_error')): ?>
++            <div class="alert alert-danger" role="alert"><?= e($message) ?></div>
++        <?php endif; ?>
++        <?php if ($message = flash('register_success')): ?>
++            <div class="alert alert-success" role="alert"><?= e($message) ?></div>
++        <?php endif; ?>
+         <form action="" method="post" class="form-control">
++            <input type="hidden" name="csrf_token" value="<?= e(csrf_token()) ?>">
+             <table class="table table-borderless">
+                 <tr>
+                     <th>Enter Username</th>
+@@ -33,22 +40,9 @@ include("../configs/add_user.php");
+                 <tr>
+                     <th>Enter Password</th>
+                     <td>
+-                        <input type="password" name="password" id="" class="form-control">
++                        <input type="password" name="password" id="" class="form-control" minlength="8" maxlength="72" required>
+                     </td>
+                 </tr>
+-                <tr>
+-                    <th>Enter Role</th>
+-                    <td>
+-                        <select type="text" name="role" id="" class="form-control">
+-                            <option value="" disabled selected></option>
+-                            <option value="admin">Admin</option>
+-                            <option value="user">User</option>
+-                        </select>
+-                        
+-                    </td>
+-                </tr>
+-                
+-
+             </table>
+             <button class="btn btn-outline-success" name="register">Register</button>
+             <a href="../index.php" class="btn btn-outline-danger">Cancel</a>
+@@ -56,4 +50,4 @@ include("../configs/add_user.php");
+     </div>
+ </body>
+ <?php include("../components/footer.html")?>
+-</html>
+\ No newline at end of file
++</html>
+diff --git a/db.sql b/db.sql
+index 39de12a..157b55d 100644
+--- a/db.sql
++++ b/db.sql
+@@ -1,10 +1,7 @@
+ -- SmartSlope academic MVP database
+--- Target: MySQL 8.0.16+ / MariaDB 10.4+
++-- Target: MySQL 8.0+ / MariaDB 10.4+
+ -- Fresh-install script. It creates a NEW database named smartslope_mvp and
+ -- does not drop or overwrite the existing baguio_multi_barangay database.
+--- If smartslope_mvp was created from an earlier copy of this script, see the
+--- commented one-time migration at the end; CREATE TABLE IF NOT EXISTS does not
+--- add columns to an already-existing table.
+ --
+ -- Scope: one study barangay; admin/user accounts; sourced location risk data;
+ -- rainfall observations and rule-based risk levels; community reports.
+@@ -30,7 +27,8 @@ CREATE TABLE IF NOT EXISTS users (
+         ON UPDATE CURRENT_TIMESTAMP,
+     PRIMARY KEY (user_id),
+     UNIQUE KEY uq_users_username (username),
+-    UNIQUE KEY uq_users_email (email)
++    UNIQUE KEY uq_users_email (email),
++    KEY idx_users_role (role)
+ ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+ 
+ -- 2. Administrative study area. Seed only the selected barangay for the MVP.
+@@ -45,6 +43,7 @@ CREATE TABLE IF NOT EXISTS barangays (
+         ON UPDATE CURRENT_TIMESTAMP,
+     PRIMARY KEY (barangay_id),
+     UNIQUE KEY uq_barangay_city_name (city_name, barangay_name),
++    KEY idx_barangays_active (is_active, barangay_name),
+     CONSTRAINT chk_barangays_active CHECK (is_active IN (0, 1))
+ ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+ 
+@@ -90,7 +89,156 @@ CREATE TABLE IF NOT EXISTS locations (
+ ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+ 
+ -- 4. Time-stamped, sourced rainfall observations and the rule-based result.
+--- PHP may calculate the 1h, 24h, and 72h totals by summing hourly API rainfall.
+--- The totals are stored in millimetres. observed_at is the UTC time for the
+--- observation/evaluation and should be converted to Asia/Manila for display.
+--- Only save a reading when the source, observation time, and required values
+\ No newline at end of file
++-- Store only values supported by the selected API or another verified source.
++-- observed_at is stored in UTC; convert to Asia/Manila for display in PHP.
++CREATE TABLE IF NOT EXISTS readings (
++    reading_id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
++    location_id INT UNSIGNED NOT NULL,
++    rainfall_1h_mm DECIMAL(7, 2) NULL,
++    rainfall_24h_mm DECIMAL(7, 2) NULL,
++    rainfall_72h_mm DECIMAL(7, 2) NULL,
++    risk_level ENUM('low', 'normal', 'medium', 'high') NOT NULL,
++    source_name VARCHAR(150) NOT NULL,
++    source_url VARCHAR(500) NULL,
++    observed_at DATETIME NOT NULL,
++    recorded_by_user_id INT UNSIGNED NULL,
++    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
++    PRIMARY KEY (reading_id),
++    UNIQUE KEY uq_reading_source_time (location_id, observed_at, source_name),
++    KEY idx_readings_latest (location_id, observed_at, reading_id),
++    KEY idx_readings_recorded_by (recorded_by_user_id),
++    CONSTRAINT fk_readings_location
++        FOREIGN KEY (location_id) REFERENCES locations (location_id)
++        ON UPDATE CASCADE ON DELETE RESTRICT,
++    CONSTRAINT fk_readings_recorded_by
++        FOREIGN KEY (recorded_by_user_id) REFERENCES users (user_id)
++        ON UPDATE CASCADE ON DELETE SET NULL,
++    CONSTRAINT chk_readings_rainfall_present CHECK (
++        rainfall_1h_mm IS NOT NULL OR rainfall_24h_mm IS NOT NULL
++        OR rainfall_72h_mm IS NOT NULL
++    ),
++    CONSTRAINT chk_readings_rainfall_1h CHECK (
++        rainfall_1h_mm IS NULL OR rainfall_1h_mm >= 0
++    ),
++    CONSTRAINT chk_readings_rainfall_24h CHECK (
++        rainfall_24h_mm IS NULL OR rainfall_24h_mm >= 0
++    ),
++    CONSTRAINT chk_readings_rainfall_72h CHECK (
++        rainfall_72h_mm IS NULL OR rainfall_72h_mm >= 0
++    )
++) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
++
++-- 5. Community reports and their admin review state.
++-- reported_by_user_id is nullable so a public report can be anonymous.
++CREATE TABLE IF NOT EXISTS reports (
++    report_id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
++    location_id INT UNSIGNED NOT NULL,
++    reported_by_user_id INT UNSIGNED NULL,
++    house_landmark VARCHAR(255) NULL,
++    message VARCHAR(2000) NOT NULL,
++    status ENUM('pending', 'reviewed', 'resolved') NOT NULL DEFAULT 'pending',
++    reviewed_by_user_id INT UNSIGNED NULL,
++    reviewed_at DATETIME NULL,
++    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
++    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
++        ON UPDATE CURRENT_TIMESTAMP,
++    PRIMARY KEY (report_id),
++    KEY idx_reports_status_created (status, created_at),
++    KEY idx_reports_location_created (location_id, created_at),
++    KEY idx_reports_reporter (reported_by_user_id),
++    KEY idx_reports_reviewer (reviewed_by_user_id),
++    CONSTRAINT fk_reports_location
++        FOREIGN KEY (location_id) REFERENCES locations (location_id)
++        ON UPDATE CASCADE ON DELETE RESTRICT,
++    CONSTRAINT fk_reports_reporter
++        FOREIGN KEY (reported_by_user_id) REFERENCES users (user_id)
++        ON UPDATE CASCADE ON DELETE SET NULL,
++    CONSTRAINT fk_reports_reviewer
++        FOREIGN KEY (reviewed_by_user_id) REFERENCES users (user_id)
++        ON UPDATE CASCADE ON DELETE SET NULL
++) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
++
++-- Base seed: one selected study barangay. The repository's current prototype
++-- points to Barangay Irisan; change this one value if the team selects another.
++INSERT INTO barangays (barangay_name, city_name)
++VALUES ('Barangay Irisan', 'Baguio City')
++ON DUPLICATE KEY UPDATE barangay_id = LAST_INSERT_ID(barangay_id);
++
++-- No default administrator is created. Create the first admin through a
++-- protected setup step and store a PHP password_hash() result in password_hash.
++-- Public registration code must always assign role='user'; never accept a role
++-- value supplied by a registration form.
++
++-- Useful MVP queries ---------------------------------------------------------
++
++-- Active locations and their latest reading (one row per location).
++SELECT
++    b.barangay_name,
++    l.location_id,
++    l.location_name,
++    l.purok_zone,
++    l.latitude,
++    l.longitude,
++    l.susceptibility_class,
++    r.rainfall_1h_mm,
++    r.rainfall_24h_mm,
++    r.rainfall_72h_mm,
++    r.risk_level,
++    r.source_name,
++    r.observed_at
++FROM locations AS l
++JOIN barangays AS b ON b.barangay_id = l.barangay_id
++LEFT JOIN readings AS r
++    ON r.reading_id = (
++        SELECT r2.reading_id
++        FROM readings AS r2
++        WHERE r2.location_id = l.location_id
++        ORDER BY r2.observed_at DESC, r2.reading_id DESC
++        LIMIT 1
++    )
++WHERE l.is_active = 1
++  AND b.is_active = 1
++ORDER BY l.location_name;
++
++-- Admin report queue.
++SELECT
++    r.report_id,
++    l.location_name,
++    r.house_landmark,
++    r.message,
++    r.status,
++    r.created_at,
++    reporter.full_name AS reporter_name,
++    reviewer.full_name AS reviewed_by
++FROM reports AS r
++JOIN locations AS l ON l.location_id = r.location_id
++LEFT JOIN users AS reporter ON reporter.user_id = r.reported_by_user_id
++LEFT JOIN users AS reviewer ON reviewer.user_id = r.reviewed_by_user_id
++WHERE r.status IN ('pending', 'reviewed')
++ORDER BY r.created_at DESC;
++
++-- Example parameterized CRUD statements for PDO (bind values in PHP).
++-- Create a location:
++-- INSERT INTO locations (barangay_id, location_name, purok_zone, latitude, longitude)
++-- VALUES (:barangay_id, :location_name, :purok_zone, :latitude, :longitude);
++--
++-- Create a sourced reading:
++-- INSERT INTO readings
++--   (location_id, rainfall_1h_mm, rainfall_24h_mm, rainfall_72h_mm, risk_level,
++--    source_name, source_url, observed_at, recorded_by_user_id)
++-- VALUES
++--   (:location_id, :rainfall_1h_mm, :rainfall_24h_mm, :rainfall_72h_mm, :risk_level,
++--    :source_name, :source_url, :observed_at, :recorded_by_user_id);
++--
++-- Submit a report:
++-- INSERT INTO reports (location_id, reported_by_user_id, house_landmark, message)
++-- VALUES (:location_id, :reported_by_user_id, :house_landmark, :message);
++--
++-- Update report status during admin review:
++-- UPDATE reports
++-- SET status = :status, reviewed_by_user_id = :admin_user_id,
++--     reviewed_at = UTC_TIMESTAMP()
++-- WHERE report_id = :report_id;
++--
++-- Archive a location instead of deleting its history:
++-- UPDATE locations SET is_active = 0 WHERE location_id = :location_id;
+diff --git a/db_test_seed.sql b/db_test_seed.sql
+index e69de29..7c693f7 100644
+--- a/db_test_seed.sql
++++ b/db_test_seed.sql
+@@ -0,0 +1,21 @@
++-- LOCAL TEST DATA ONLY. Do not run this file on a public or production database.
++-- The active location is clearly marked TEST ONLY so the report form can be tested.
++USE smartslope_mvp;
++
++INSERT INTO locations (
++    barangay_id,
++    location_name,
++    purok_zone,
++    susceptibility_class,
++    is_active
++)
++SELECT
++    barangay_id,
++    'TEST ONLY - report flow location',
++    'LOCAL TEST',
++    'unknown',
++    1
++FROM barangays
++WHERE barangay_name = 'Barangay Irisan'
++  AND city_name = 'Baguio City'
++ON DUPLICATE KEY UPDATE is_active = 1;
+diff --git a/index.php b/index.php
+index e95f177..f76ae36 100644
+--- a/index.php
++++ b/index.php
+@@ -25,7 +25,14 @@ include("./configs/auth.php");
+     
+     <div class="container" style="width: 300px; align-items:center;text-align:center">
+         <h4>Login Page</h4>
++        <?php if ($message = flash('login_error')): ?>
++            <div class="alert alert-danger" role="alert"><?= e($message) ?></div>
++        <?php endif; ?>
++        <?php if ($message = flash('register_success')): ?>
++            <div class="alert alert-success" role="alert"><?= e($message) ?></div>
++        <?php endif; ?>
+         <form action="" method="post">
++            <input type="hidden" name="csrf_token" value="<?= e(csrf_token()) ?>">
+             <div class="card" >
+                 <div class="card-header">
+                     <p>Enter credentials</p>
+@@ -50,4 +57,4 @@ include("./configs/auth.php");
+     </div>
+ <?php include("components/footer.html")?>
+ </body>
+-</html>
+\ No newline at end of file
++</html>
+diff --git a/sql_import.sql b/sql_import.sql
+deleted file mode 100644
+index c13fb1a..0000000
+--- a/sql_import.sql
++++ /dev/null
+@@ -1,9 +0,0 @@
+---create database
+-
+-CREATE DATABASE IF NOT EXISTS smartslope_mvp
+-  CHARACTER SET utf8mb4
+-  COLLATE utf8mb4_unicode_ci;
+-
+-EXIT;
+--- import slq
+-mysql -u root -p smartslope_mvp < db.sql  
+\ No newline at end of file

@@ -122,4 +122,17 @@ final class LocationRepository
         ]);
         return $statement->rowCount() > 0 || $this->find($locationId) !== null;
     }
+
+    public function delete(int $locationId): bool
+    {
+        $statement = $this->pdo->prepare(
+            "DELETE FROM locations
+             WHERE location_id = :location_id
+               AND barangay_id = (SELECT barangay_id FROM barangays
+                                  WHERE barangay_name = 'Barangay Irisan'
+                                    AND city_name = 'Baguio City' LIMIT 1)"
+        );
+        $statement->execute(['location_id' => $locationId]);
+        return $statement->rowCount() > 0;
+    }
 }

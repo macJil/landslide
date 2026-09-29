@@ -16,13 +16,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $invalidLocationId = array_key_exists('location_id', $_POST)
         && (!$locationId || $locationId < 1);
 
-    if (in_array($action, ['archive', 'restore'], true)) {
-        if (!$locationId || !$locations->setActive((int) $locationId, $action === 'restore')) {
-            flash('location_message', 'The location was not found.');
+    if ($action === 'delete' && $locationId && $locationId > 0) {
+        if ($locations->delete($locationId)) {
+            flash('location_message', 'Location deleted.');
         } else {
-            flash('location_message', $action === 'archive'
-                ? 'Location archived. Its readings and reports remain in the database.'
-                : 'Location restored.');
+            flash('location_message', 'The location could not be deleted.');
         }
         redirect_to('add_location.php');
     }
@@ -32,43 +30,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $landmark = trim(post_string('landmark'));
     $latitudeRaw = trim(post_string('latitude'));
     $longitudeRaw = trim(post_string('longitude'));
-    $susceptibility = post_string('susceptibility_class') ?: 'unknown';
-    $sourceName = trim(post_string('hazard_source_name'));
-    $sourceUrl = trim(post_string('hazard_source_url'));
-    $sourceDate = trim(post_string('hazard_source_date'));
     $nameLength = preg_match_all('/./us', $name);
     $zoneLength = $zone === '' ? 0 : preg_match_all('/./us', $zone);
     $landmarkLength = $landmark === '' ? 0 : preg_match_all('/./us', $landmark);
-    $sourceNameLength = $sourceName === '' ? 0 : preg_match_all('/./us', $sourceName);
     $latitudeValid = $latitudeRaw === '' || preg_match('/\A-?\d{1,3}(?:\.\d{1,6})?\z/', $latitudeRaw) === 1;
     $longitudeValid = $longitudeRaw === '' || preg_match('/\A-?\d{1,3}(?:\.\d{1,6})?\z/', $longitudeRaw) === 1;
     $latitude = $latitudeRaw === '' ? null : (float) $latitudeRaw;
     $longitude = $longitudeRaw === '' ? null : (float) $longitudeRaw;
-    $validSourceUrl = $sourceUrl === '' || (
-        filter_var($sourceUrl, FILTER_VALIDATE_URL) !== false
-        && in_array(strtolower((string) parse_url($sourceUrl, PHP_URL_SCHEME)), ['http', 'https'], true)
-        && strlen($sourceUrl) <= 500
-    );
-    $validSourceDate = $sourceDate === '' || (
-        preg_match('/\A\d{4}-\d{2}-\d{2}\z/', $sourceDate) === 1
-        && checkdate((int) substr($sourceDate, 5, 2), (int) substr($sourceDate, 8, 2), (int) substr($sourceDate, 0, 4))
-    );
-    $validSusceptibility = in_array(
-        $susceptibility,
-        ['very_high', 'high', 'moderate', 'low', 'debris_flow', 'unknown'],
-        true
-    );
 
     if ($invalidLocationId || $nameLength === false || $nameLength < 1 || $nameLength > 150
         || $zoneLength === false || $zoneLength > 100
         || $landmarkLength === false || $landmarkLength > 255
-        || $sourceNameLength === false || $sourceNameLength > 150
         || !$latitudeValid || !$longitudeValid
         || (($latitude === null) !== ($longitude === null))
         || ($latitude !== null && ($latitude < -90 || $latitude > 90))
-        || ($longitude !== null && ($longitude < -180 || $longitude > 180))
-        || !$validSourceUrl || !$validSourceDate || !$validSusceptibility) {
-        flash('location_message', 'Check the location name, optional coordinates, source details, and classification.');
+        || ($longitude !== null && ($longitude < -180 || $longitude > 180))) {
+        flash('location_message', 'Check the location name, optional coordinates, and landmark.');
         redirect_to('add_location.php');
     }
 
@@ -78,10 +55,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         'landmark' => $landmark === '' ? null : $landmark,
         'latitude' => $latitude,
         'longitude' => $longitude,
-        'susceptibility_class' => $susceptibility,
-        'hazard_source_name' => $sourceName === '' ? null : $sourceName,
-        'hazard_source_url' => $sourceUrl === '' ? null : $sourceUrl,
-        'hazard_source_date' => $sourceDate === '' ? null : $sourceDate,
+        'susceptibility_class' => 'unknown',
+        'hazard_source_name' => null,
+        'hazard_source_url' => null,
+        'hazard_source_date' => null,
     ];
 
     try {
@@ -137,14 +114,6 @@ $locationRows = $locations->adminList();
                     <div class="col-md-6"><label class="form-label" for="landmark">Landmark</label><input class="form-control" id="landmark" name="landmark" maxlength="255" value="<?= e($editingLocation['landmark'] ?? '') ?>"></div>
                     <div class="col-md-3"><label class="form-label" for="latitude">Latitude</label><input class="form-control" id="latitude" name="latitude" inputmode="decimal" value="<?= e($editingLocation['latitude'] ?? '') ?>"></div>
                     <div class="col-md-3"><label class="form-label" for="longitude">Longitude</label><input class="form-control" id="longitude" name="longitude" inputmode="decimal" value="<?= e($editingLocation['longitude'] ?? '') ?>"></div>
-                    <div class="col-md-4"><label class="form-label" for="susceptibility">Baseline susceptibility</label><select class="form-select" id="susceptibility" name="susceptibility_class">
-                        <?php foreach (['unknown', 'low', 'moderate', 'high', 'very_high', 'debris_flow'] as $class): ?>
-                            <option value="<?= e($class) ?>" <?= ($editingLocation['susceptibility_class'] ?? 'unknown') === $class ? 'selected' : '' ?>><?= e(ucwords(str_replace('_', ' ', $class))) ?></option>
-                        <?php endforeach; ?>
-                    </select></div>
-                    <div class="col-md-4"><label class="form-label" for="source-name">Hazard source name</label><input class="form-control" id="source-name" name="hazard_source_name" maxlength="150" value="<?= e($editingLocation['hazard_source_name'] ?? '') ?>"></div>
-                    <div class="col-md-4"><label class="form-label" for="source-date">Hazard source date</label><input class="form-control" type="date" id="source-date" name="hazard_source_date" value="<?= e($editingLocation['hazard_source_date'] ?? '') ?>"></div>
-                    <div class="col-12"><label class="form-label" for="source-url">Hazard source URL</label><input class="form-control" type="url" id="source-url" name="hazard_source_url" maxlength="500" value="<?= e($editingLocation['hazard_source_url'] ?? '') ?>"></div>
                 </div>
                 <div class="mt-3 d-flex gap-2"><button class="btn btn-primary" type="submit" name="action" value="save"><?= $editingLocation ? 'Save changes' : 'Add location' ?></button>
                     <?php if ($editingLocation): ?><a class="btn btn-outline-secondary" href="add_location.php">Cancel</a><?php endif; ?></div>
@@ -152,29 +121,27 @@ $locationRows = $locations->adminList();
         </div>
     </section>
     <section class="card">
-        <div class="card-header"><h2 class="h5 mb-0">Locations and archived records</h2></div>
+        <div class="card-header"><h2 class="h5 mb-0">Locations</h2></div>
         <div class="table-responsive"><table class="table table-striped align-middle mb-0">
-            <thead><tr><th>Location</th><th>Coordinates</th><th>Susceptibility</th><th>State</th><th>Actions</th></tr></thead>
+            <thead><tr><th>Location</th><th>Coordinates</th><th>Actions</th></tr></thead>
             <tbody>
             <?php foreach ($locationRows as $location): ?>
                 <tr>
                     <td><?= e($location['location_name']) ?><?php if ($location['purok_zone']): ?><br><small><?= e($location['purok_zone']) ?></small><?php endif; ?></td>
                     <td><?= $location['latitude'] !== null ? e($location['latitude']) . ', ' . e($location['longitude']) : 'Not set' ?></td>
-                    <td><?= e(ucwords(str_replace('_', ' ', $location['susceptibility_class']))) ?></td>
-                    <td><?= (int) $location['is_active'] === 1 ? 'Active' : 'Archived' ?></td>
-                    <td class="d-flex gap-2">
-                        <a class="btn btn-sm btn-outline-primary" href="?edit=<?= (int) $location['location_id'] ?>">Edit</a>
-                        <form method="post" action="add_location.php">
-                            <input type="hidden" name="csrf_token" value="<?= e(csrf_token()) ?>">
-                            <input type="hidden" name="location_id" value="<?= (int) $location['location_id'] ?>">
-                            <button class="btn btn-sm <?= (int) $location['is_active'] === 1 ? 'btn-outline-danger' : 'btn-outline-success' ?>" type="submit" name="action" value="<?= (int) $location['is_active'] === 1 ? 'archive' : 'restore' ?>">
-                                <?= (int) $location['is_active'] === 1 ? 'Archive' : 'Restore' ?>
-                            </button>
-                        </form>
+                    <td>
+                        <div class="d-flex gap-2">
+                            <a class="btn btn-sm btn-outline-primary" href="?edit=<?= (int) $location['location_id'] ?>">Update</a>
+                            <form method="post" action="add_location.php" onsubmit="return confirm('Are you sure you want to delete this location?');">
+                                <input type="hidden" name="csrf_token" value="<?= e(csrf_token()) ?>">
+                                <input type="hidden" name="location_id" value="<?= (int) $location['location_id'] ?>">
+                                <button class="btn btn-sm btn-outline-danger" type="submit" name="action" value="delete">Delete</button>
+                            </form>
+                        </div>
                     </td>
                 </tr>
             <?php endforeach; ?>
-            <?php if (!$locationRows): ?><tr><td colspan="5" class="text-center">No locations are set up yet.</td></tr><?php endif; ?>
+            <?php if (!$locationRows): ?><tr><td colspan="3" class="text-center">No locations are set up yet.</td></tr><?php endif; ?>
             </tbody>
         </table></div>
     </section>

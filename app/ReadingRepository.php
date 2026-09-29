@@ -135,19 +135,4 @@ final class ReadingRepository
         ]);
         return $statement->rowCount() > 0 || $this->find($readingId) !== null;
     }
-
-    public function delete(int $readingId): bool
-    {
-        $statement = $this->pdo->prepare(
-            "DELETE FROM readings
-             WHERE reading_id = :reading_id
-               AND location_id IN (
-                   SELECT l.location_id FROM locations AS l
-                   INNER JOIN barangays AS b ON b.barangay_id = l.barangay_id
-                   WHERE b.barangay_name = 'Barangay Irisan' AND b.city_name = 'Baguio City'
-               )"
-        );
-        $statement->execute(['reading_id' => $readingId]);
-        return $statement->rowCount() > 0;
-    }
 }

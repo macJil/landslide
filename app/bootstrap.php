@@ -24,6 +24,7 @@ require_once __DIR__ . '/ReportRepository.php';
 require_once __DIR__ . '/ReadingRepository.php';
 require_once __DIR__ . '/LocationRepository.php';
 require_once __DIR__ . '/RiskAnalyzer.php';
+require_once __DIR__ . '/WeatherApiClient.php';
 
 
 $databaseConfig = require dirname(__DIR__) . '/configs/config.php';

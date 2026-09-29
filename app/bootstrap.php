@@ -21,7 +21,10 @@ require_once __DIR__ . '/Database.php';
 require_once __DIR__ . '/helpers.php';
 require_once __DIR__ . '/UserRepository.php';
 require_once __DIR__ . '/ReportRepository.php';
+require_once __DIR__ . '/ReadingRepository.php';
 require_once __DIR__ . '/LocationRepository.php';
+require_once __DIR__ . '/RiskAnalyzer.php';
+
 
 $databaseConfig = require dirname(__DIR__) . '/configs/config.php';
 

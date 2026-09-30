@@ -1,4 +1,5 @@
 <?php
+
 declare(strict_types=1);
 
 header('Content-Type: application/json; charset=utf-8');
@@ -24,12 +25,12 @@ if ($locationId === false || $locationId === null || $locationId < 1) {
     respond_json(400, ['error' => 'invalid_location_id']);
 }
 
-require_once __DIR__ . '/../app/Database.php';
+// Mark as JSON request for consistent error handling in bootstrap
+define('SMARTSLOPE_JSON_REQUEST', true);
+require_once __DIR__ . '/../app/bootstrap.php';
 require_once __DIR__ . '/../app/ReadingRepository.php';
 
 try {
-    $config = require __DIR__ . '/../configs/config.php';
-    $pdo = Database::connect($config);
     $reading = (new ReadingRepository($pdo))->latestForActiveLocation((int) $locationId);
     respond_json(200, ['data' => $reading]);
 } catch (PDOException $exception) {

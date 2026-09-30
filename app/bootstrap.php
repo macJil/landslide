@@ -1,7 +1,15 @@
 <?php
+
 declare(strict_types=1);
 
+
 date_default_timezone_set('Asia/Manila');
+
+
+// Load base_path configuration early for session cookie path
+$pathSettings = require dirname(__DIR__) . '/configs/config.php';
+$basePath = rtrim(trim($pathSettings['base_path']), '/');
+unset($pathSettings);
 
 if (session_status() !== PHP_SESSION_ACTIVE) {
     $isHttps = isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off';
@@ -12,10 +20,11 @@ if (session_status() !== PHP_SESSION_ACTIVE) {
         'httponly' => true,
         'secure' => $isHttps,
         'samesite' => 'Lax',
-        'path' => '/',
+        'path' => $basePath === '' ? '/' : $basePath,
     ]);
     session_start();
 }
+
 
 require_once __DIR__ . '/Database.php';
 require_once __DIR__ . '/helpers.php';
@@ -28,6 +37,7 @@ require_once __DIR__ . '/WeatherApiClient.php';
 
 
 $databaseConfig = require dirname(__DIR__) . '/configs/config.php';
+
 
 try {
     $pdo = Database::connect($databaseConfig);

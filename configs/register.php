@@ -18,46 +18,40 @@ require_once __DIR__ . '/add_user.php';
     </header>
     <div class="container" style="width: 900px; align-items:center; text-align: center" >
         <h4>Register Page</h4>
+        <?php if ($message = flash('register_error')): ?>
+            <div class="alert alert-danger" role="alert"><?= e($message) ?></div>
+        <?php endif; ?>
+        <?php if ($message = flash('register_success')): ?>
+            <div class="alert alert-success" role="alert"><?= e($message) ?></div>
+        <?php endif; ?>
         <form action="<?= e(app_url('configs/register.php')) ?>" method="post" class="form-control">
+            <input type="hidden" name="csrf_token" value="<?= e(csrf_token()) ?>">
             <table class="table table-borderless">
                 <tr>
                     <th>Enter Username</th>
                     <td>
-                        <input type="text" name="username" id="" class="form-control">
+                        <input type="text" name="username" id="username" class="form-control" required>
                     </td>
                 </tr>
                 <tr>
                     <th>Enter Full Name</th>
                     <td>
-                        <input type="text" name="full_name" id="" class="form-control">
+                        <input type="text" name="full_name" id="full_name" class="form-control" required>
                     </td>
                 </tr>
-               
+              
                 <tr>
                     <th>Enter Email</th>
                     <td>
-                        <input type="email" name="email" id="" class="form-control">
+                        <input type="email" name="email" id="email" class="form-control" required>
                     </td>
                 </tr>
                 <tr>
                     <th>Enter Password</th>
                     <td>
-                        <input type="password" name="password" id="" class="form-control">
+                        <input type="password" name="password" id="password" class="form-control" required minlength="8">
                     </td>
                 </tr>
-                <tr>
-                    <th>Enter Role</th>
-                    <td>
-                        <select type="text" name="role" id="" class="form-control">
-                            <option value="" disabled selected></option>
-                            <option value="admin">Admin</option>
-                            <option value="user">User</option>
-                        </select>
-                        
-                    </td>
-                </tr>
-                
-
             </table>
             <button class="btn btn-outline-success" name="register">Register</button>
             <a href="<?= e(app_url('index.php')) ?>" class="btn btn-outline-danger">Cancel</a>

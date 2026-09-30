@@ -13,13 +13,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 if (!$readingId || $readingId < 1) {
     flash('reading_message', 'Choose a valid API-collected reading.');
-    redirect_to('readings.php');
+    redirect_to('components/admins/readings.php');
 }
 
 $reading = $readingRepository->find((int) $readingId);
 if ($reading === null) {
     flash('reading_message', 'Only current API-collected readings can be edited.');
-    redirect_to('readings.php');
+    redirect_to('components/admins/readings.php');
 }
 
 $locations = $locationRepository->activeForStudyArea();
@@ -79,7 +79,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             try {
                 if ($readingRepository->update((int) $readingId, $readingData)) {
                     flash('reading_message', 'Reading updated.');
-                    redirect_to('readings.php');
+                    redirect_to('components/admins/readings.php');
                 }
                 $message = 'The reading could not be updated.';
             } catch (PDOException $exception) {
@@ -95,7 +95,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 $reading = $readingRepository->find((int) $readingId);
 if ($reading === null) {
     flash('reading_message', 'The reading is no longer available.');
-    redirect_to('readings.php');
+    redirect_to('components/admins/readings.php');
 }
 $observedAtLocal = (new DateTimeImmutable($reading['observed_at'], new DateTimeZone('UTC')))
     ->setTimezone(new DateTimeZone('Asia/Manila'))
@@ -107,12 +107,12 @@ $observedAtLocal = (new DateTimeImmutable($reading['observed_at'], new DateTimeZ
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Edit reading | SmartSlope</title>
-    <link rel="stylesheet" href="../../assets/css/bootstrap.min.css">
+    <link rel="stylesheet" href="<?= e(app_url('assets/css/bootstrap.min.css')) ?>">
 </head>
 <body>
 <header class="container py-3 d-flex justify-content-between align-items-center">
     <h1 class="h3 mb-0">Edit API reading</h1>
-    <a class="btn btn-outline-secondary" href="readings.php">Back to readings</a>
+    <a class="btn btn-outline-secondary" href="<?= e(app_url('components/admins/readings.php')) ?>">Back to readings</a>
 </header>
 <main class="container pb-4">
     <?php if ($message !== null): ?>
@@ -121,7 +121,7 @@ $observedAtLocal = (new DateTimeImmutable($reading['observed_at'], new DateTimeZ
     <section class="card">
         <div class="card-body">
             <p><strong>Source:</strong> <?= e($reading['source_name']) ?><?php if ($reading['source_url']): ?><br><span class="small text-muted">Source URL: <?= e($reading['source_url']) ?></span><?php endif; ?></p>
-            <form method="post" action="edit_reading.php?id=<?= (int) $readingId ?>">
+            <form method="post" action="<?= e(app_url('components/admins/edit_reading.php?id=' . ((int) $readingId))) ?>">
                 <input type="hidden" name="csrf_token" value="<?= e(csrf_token()) ?>">
                 <input type="hidden" name="reading_id" value="<?= (int) $readingId ?>">
                 <div class="row g-3">
@@ -152,7 +152,7 @@ $observedAtLocal = (new DateTimeImmutable($reading['observed_at'], new DateTimeZ
                 </div>
                 <div class="mt-3 d-flex gap-2">
                     <button class="btn btn-primary" type="submit">Save changes</button>
-                    <a class="btn btn-outline-secondary" href="readings.php">Cancel</a>
+                    <a class="btn btn-outline-secondary" href="<?= e(app_url('components/admins/readings.php')) ?>">Cancel</a>
                 </div>
             </form>
         </div>

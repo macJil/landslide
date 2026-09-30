@@ -1,6 +1,8 @@
 <?php
 declare(strict_types=1);
 
+require_once dirname(__DIR__) . '/configs/paths.php';
+
 function e($value): string
 {
     return htmlspecialchars((string) $value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
@@ -40,9 +42,15 @@ function flash(string $key, ?string $message = null): ?string
     return is_string($value) ? $value : null;
 }
 
+/** Build a browser URL from a trusted, project-root-relative path. */
+function app_url(string $path = ''): string
+{
+    return APP_BASE_PATH . '/' . ltrim($path, '/');
+}
+
 function redirect_to(string $path): void
 {
-    header('Location: ' . $path, true, 303);
+    header('Location: ' . app_url($path), true, 303);
     exit;
 }
 
@@ -66,13 +74,13 @@ function display_local_datetime(?string $value): string
 function require_user(): void
 {
     if (empty($_SESSION['user_id']) || ($_SESSION['role'] ?? '') !== 'user') {
-        redirect_to('../../index.php');
+        redirect_to('index.php');
     }
 }
 
 function require_admin(): void
 {
     if (empty($_SESSION['user_id']) || ($_SESSION['role'] ?? '') !== 'admin') {
-        redirect_to('../../index.php');
+        redirect_to('index.php');
     }
 }

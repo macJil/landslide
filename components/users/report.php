@@ -2,7 +2,7 @@
     <div class="card-header"><h3 class="h5 mb-0">Submit a ground report</h3></div>
     <div class="card-body">
         <p class="text-muted">Describe an observed ground or slope condition. Reports are reviewed by an administrator.</p>
-        <form action="submit_report.php" method="post">
+        <form action="<?= e(app_url('components/users/submit_report.php')) ?>" method="post">
             <input type="hidden" name="csrf_token" value="<?= e(csrf_token()) ?>">
             <div class="mb-3">
                 <label for="report-location" class="form-label">Location</label>

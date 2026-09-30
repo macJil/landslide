@@ -12,13 +12,13 @@ $riskLocations = (new LocationRepository($pdo))->activeForStudyArea();
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>SmartSlope Resident</title>
-    <link rel="stylesheet" href="../../assets/css/bootstrap.min.css">
-    <script src="../../assets/js/bootstrap.bundle.js" defer></script>
+    <link rel="stylesheet" href="<?= e(app_url('assets/css/bootstrap.min.css')) ?>">
+    <script src="<?= e(app_url('assets/js/bootstrap.bundle.js')) ?>" defer></script>
 </head>
 <body>
 <header class="nav" style="background-color: aliceblue; display:flex; justify-content:space-between; align-items:center; padding:10px 20px;">
     <h1>Barangay Irisan (Baguio City) — SmartSlope</h1>
-    <form action="../../configs/logout.php" method="post">
+    <form action="<?= e(app_url('configs/logout.php')) ?>" method="post">
         <input type="hidden" name="csrf_token" value="<?= e(csrf_token()) ?>">
         <button class="btn btn-outline-danger" type="submit">Log out</button>
     </form>
@@ -40,7 +40,7 @@ $riskLocations = (new LocationRepository($pdo))->activeForStudyArea();
     </div>
 </main>
 <?php include __DIR__ . '/../footer.html'; ?>
-<script src="../../assets/js/vendor/jquery.min.js"></script>
-<script src="../../assets/js/app.js"></script>
+<script src="<?= e(app_url('assets/js/vendor/jquery.min.js')) ?>"></script>
+<script src="<?= e(app_url('assets/js/app.js')) ?>"></script>
 </body>
 </html>

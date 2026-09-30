@@ -8,7 +8,7 @@ $locations = new LocationRepository($pdo);
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!csrf_is_valid($_POST['csrf_token'] ?? null)) {
         flash('location_message', 'Your session expired. Reload the page and try again.');
-        redirect_to('add_location.php');
+        redirect_to('components/admins/add_location.php');
     }
 
     $action = post_string('action') ?: 'save';
@@ -22,7 +22,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } else {
             flash('location_message', 'The location could not be deleted.');
         }
-        redirect_to('add_location.php');
+        redirect_to('components/admins/add_location.php');
     }
 
     $name = trim(post_string('location_name'));
@@ -46,7 +46,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         || ($latitude !== null && ($latitude < -90 || $latitude > 90))
         || ($longitude !== null && ($longitude < -180 || $longitude > 180))) {
         flash('location_message', 'Check the location name, optional coordinates, and landmark.');
-        redirect_to('add_location.php');
+        redirect_to('components/admins/add_location.php');
     }
 
     $data = [
@@ -78,7 +78,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         error_log('SmartSlope study area is unavailable: ' . $exception->getMessage());
         flash('location_message', 'The study barangay is missing or inactive. Check the database seed.');
     }
-    redirect_to('add_location.php');
+    redirect_to('components/admins/add_location.php');
 }
 
 $editId = filter_input(INPUT_GET, 'edit', FILTER_VALIDATE_INT);
@@ -91,12 +91,12 @@ $locationRows = $locations->adminList();
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Manage locations | SmartSlope</title>
-    <link rel="stylesheet" href="../../assets/css/bootstrap.min.css">
+    <link rel="stylesheet" href="<?= e(app_url('assets/css/bootstrap.min.css')) ?>">
 </head>
 <body>
 <header class="container py-3 d-flex justify-content-between align-items-center">
     <h1 class="h3 mb-0">Manage study locations</h1>
-    <a class="btn btn-outline-secondary" href="admin.php">Back to admin</a>
+    <a class="btn btn-outline-secondary" href="<?= e(app_url('components/admins/admin.php')) ?>">Back to admin</a>
 </header>
 <main class="container pb-4">
     <?php if ($message = flash('location_message')): ?>
@@ -105,7 +105,7 @@ $locationRows = $locations->adminList();
     <section class="card mb-4">
         <div class="card-header"><h2 class="h5 mb-0"><?= $editingLocation ? 'Edit location' : 'Add location' ?> — Barangay Irisan</h2></div>
         <div class="card-body">
-            <form method="post" action="add_location.php">
+            <form method="post" action="<?= e(app_url('components/admins/add_location.php')) ?>">
                 <input type="hidden" name="csrf_token" value="<?= e(csrf_token()) ?>">
                 <?php if ($editingLocation): ?><input type="hidden" name="location_id" value="<?= (int) $editingLocation['location_id'] ?>"><?php endif; ?>
                 <div class="row g-3">
@@ -116,7 +116,7 @@ $locationRows = $locations->adminList();
                     <div class="col-md-3"><label class="form-label" for="longitude">Longitude</label><input class="form-control" id="longitude" name="longitude" inputmode="decimal" value="<?= e($editingLocation['longitude'] ?? '') ?>"></div>
                 </div>
                 <div class="mt-3 d-flex gap-2"><button class="btn btn-primary" type="submit" name="action" value="save"><?= $editingLocation ? 'Save changes' : 'Add location' ?></button>
-                    <?php if ($editingLocation): ?><a class="btn btn-outline-secondary" href="add_location.php">Cancel</a><?php endif; ?></div>
+                    <?php if ($editingLocation): ?><a class="btn btn-outline-secondary" href="<?= e(app_url('components/admins/add_location.php')) ?>">Cancel</a><?php endif; ?></div>
             </form>
         </div>
     </section>
@@ -131,8 +131,8 @@ $locationRows = $locations->adminList();
                     <td><?= $location['latitude'] !== null ? e($location['latitude']) . ', ' . e($location['longitude']) : 'Not set' ?></td>
                     <td>
                         <div class="d-flex gap-2">
-                            <a class="btn btn-sm btn-outline-primary" href="?edit=<?= (int) $location['location_id'] ?>">Update</a>
-                            <form method="post" action="add_location.php" onsubmit="return confirm('Are you sure you want to delete this location?');">
+                            <a class="btn btn-sm btn-outline-primary" href="<?= e(app_url('components/admins/add_location.php?edit=' . ((int) $location['location_id']))) ?>">Update</a>
+                            <form method="post" action="<?= e(app_url('components/admins/add_location.php')) ?>" onsubmit="return confirm('Are you sure you want to delete this location?');">
                                 <input type="hidden" name="csrf_token" value="<?= e(csrf_token()) ?>">
                                 <input type="hidden" name="location_id" value="<?= (int) $location['location_id'] ?>">
                                 <button class="btn btn-sm btn-outline-danger" type="submit" name="action" value="delete">Delete</button>

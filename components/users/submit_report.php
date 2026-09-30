@@ -12,7 +12,7 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 
 if (!csrf_is_valid($_POST['csrf_token'] ?? null)) {
     flash('report_error', 'Your session expired. Please reload the page and try again.');
-    redirect_to('user.php');
+    redirect_to('components/users/user.php');
 }
 
 $locationId = filter_var($_POST['location_id'] ?? null, FILTER_VALIDATE_INT);
@@ -23,7 +23,7 @@ $messageLength = preg_match_all('/./us', $message, $matches);
 if (!$locationId || $message === '' || $messageLength === false || $messageLength > 2000
     || strlen($houseLandmark) > 255) {
     flash('report_error', 'Choose a location and enter a report of at most 2,000 characters.');
-    redirect_to('user.php');
+    redirect_to('components/users/user.php');
 }
 
 try {
@@ -41,4 +41,4 @@ try {
     flash('report_error', 'The report could not be submitted. Please try again.');
 }
 
-redirect_to('user.php');
+redirect_to('components/users/user.php');

@@ -277,7 +277,7 @@
         });
 
         try {
-            const response = await fetch('../../api/weather.php', {
+            const response = await fetch(locationSelect.dataset.weatherUrl, {
                 method: 'POST',
                 credentials: 'same-origin',
                 headers: {

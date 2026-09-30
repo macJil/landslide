@@ -1,5 +1,5 @@
 <?php
-include("../configs/add_user.php");
+require_once __DIR__ . '/add_user.php';
 
 
 ?>
@@ -9,8 +9,8 @@ include("../configs/add_user.php");
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Register | Landslide Warning System</title>
-    <link rel="stylesheet" href="../assets/css/bootstrap.min.css">
-    <script src="../assets/js/bootstrap.bundle.js" defer></script>
+    <link rel="stylesheet" href="<?= e(app_url('assets/css/bootstrap.min.css')) ?>">
+    <script src="<?= e(app_url('assets/js/bootstrap.bundle.js')) ?>" defer></script>
 </head>
 <body>
     <header class="nav" style="background-color: aliceblue; display:flex; justify-content:space-between; align-items:center; padding:10px 20px;">
@@ -18,7 +18,7 @@ include("../configs/add_user.php");
     </header>
     <div class="container" style="width: 900px; align-items:center; text-align: center" >
         <h4>Register Page</h4>
-        <form action="" method="post" class="form-control">
+        <form action="<?= e(app_url('configs/register.php')) ?>" method="post" class="form-control">
             <table class="table table-borderless">
                 <tr>
                     <th>Enter Username</th>
@@ -60,9 +60,9 @@ include("../configs/add_user.php");
 
             </table>
             <button class="btn btn-outline-success" name="register">Register</button>
-            <a href="../index.php" class="btn btn-outline-danger">Cancel</a>
+            <a href="<?= e(app_url('index.php')) ?>" class="btn btn-outline-danger">Cancel</a>
         </form>
     </div>
 </body>
-<?php include("../components/footer.html")?>
+<?php include __DIR__ . '/../components/footer.html';?>
 </html>

@@ -12,7 +12,7 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 
 if (!csrf_is_valid($_POST['csrf_token'] ?? null)) {
     flash('admin_report_message', 'Your session expired. Reload the page and try again.');
-    redirect_to('admin.php');
+    redirect_to('components/admins/admin.php');
 }
 
 $reportId = filter_var($_POST['report_id'] ?? null, FILTER_VALIDATE_INT);
@@ -20,7 +20,7 @@ $status = (string) ($_POST['status'] ?? '');
 
 if (!$reportId || !in_array($status, ['reviewed', 'resolved'], true)) {
     flash('admin_report_message', 'The report update was not valid.');
-    redirect_to('admin.php');
+    redirect_to('components/admins/admin.php');
 }
 
 try {
@@ -35,4 +35,4 @@ try {
     flash('admin_report_message', 'The report status could not be updated.');
 }
 
-redirect_to('admin.php');
+redirect_to('components/admins/admin.php');

@@ -24,6 +24,7 @@ $readSetting = static function (string $key, string $default) use ($fileValues):
 };
 
 return [
+    'base_path' => $readSetting('APP_BASE_PATH', ''),
     'host' => $readSetting('DB_HOST', '127.0.0.1'),
     'port' => (int) $readSetting('DB_PORT', '3306'),
     'database' => $readSetting('DB_DATABASE', 'smartslope_mvp'),

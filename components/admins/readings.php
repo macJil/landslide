@@ -8,7 +8,7 @@ $readingRepository = new ReadingRepository($pdo);
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!csrf_is_valid($_POST['csrf_token'] ?? null)) {
         flash('reading_message', 'Your session expired. Reload the page and try again.');
-        redirect_to('readings.php');
+        redirect_to('components/admins/readings.php');
     }
 
     $action = post_string('action');
@@ -21,7 +21,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             flash('reading_error', 'The reading could not be deleted.');
         }
     }
-    redirect_to('readings.php');
+    redirect_to('components/admins/readings.php');
 }
 
 if (isset($_GET['action']) && $_GET['action'] === 'download') {
@@ -53,14 +53,14 @@ $readingRows = $readingRepository->adminList();
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Readings | SmartSlope</title>
-    <link rel="stylesheet" href="../../assets/css/bootstrap.min.css">
+    <link rel="stylesheet" href="<?= e(app_url('assets/css/bootstrap.min.css')) ?>">
 </head>
 <body>
 <header class="container py-3 d-flex justify-content-between align-items-center">
     <h1 class="h3 mb-0">Readings</h1>
     <div class="d-flex gap-2">
-        <a class="btn btn-primary" href="?action=download">Download CSV</a>
-        <a class="btn btn-outline-secondary" href="admin.php">Back to admin</a>
+        <a class="btn btn-primary" href="<?= e(app_url('components/admins/readings.php?action=download')) ?>">Download CSV</a>
+        <a class="btn btn-outline-secondary" href="<?= e(app_url('components/admins/admin.php')) ?>">Back to admin</a>
     </div>
 </header>
 <main class="container pb-4">
@@ -84,8 +84,8 @@ $readingRows = $readingRepository->adminList();
                     <td><?= e($reading['source_name']) ?></td>
                     <td>
                         <div class="d-flex gap-2">
-                            <a class="btn btn-sm btn-outline-primary" href="edit_reading.php?id=<?= (int) $reading['reading_id'] ?>">Edit</a>
-                            <form method="post" action="readings.php" onsubmit="return confirm('Are you sure you want to delete this reading?');">
+                            <a class="btn btn-sm btn-outline-primary" href="<?= e(app_url('components/admins/edit_reading.php?id=' . ((int) $reading['reading_id']))) ?>">Edit</a>
+                            <form method="post" action="<?= e(app_url('components/admins/readings.php')) ?>" onsubmit="return confirm('Are you sure you want to delete this reading?');">
                                 <input type="hidden" name="csrf_token" value="<?= e(csrf_token()) ?>">
                                 <input type="hidden" name="reading_id" value="<?= (int) $reading['reading_id'] ?>">
                                 <button class="btn btn-sm btn-outline-danger" type="submit" name="action" value="delete">Delete</button>

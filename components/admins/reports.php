@@ -4,7 +4,7 @@
         <?php if ($message = flash('admin_report_message')): ?>
             <div class="alert alert-info" role="status"><?= e($message) ?></div>
         <?php endif; ?>
-        <form method="get" action="admin.php" class="row g-2 mb-3">
+        <form method="get" action="<?= e(app_url('components/admins/admin.php')) ?>" class="row g-2 mb-3">
             <div class="col-auto">
                 <label class="form-label" for="report-status-filter">Filter by status</label>
                 <select class="form-select" id="report-status-filter" name="status">
@@ -38,7 +38,7 @@
                             <td><?= e(display_local_datetime($report['created_at'])) ?></td>
                             <td>
                                 <?php if ($report['status'] !== 'resolved'): ?>
-                                    <form action="update_report.php" method="post" class="d-flex gap-2">
+                                    <form action="<?= e(app_url('components/admins/update_report.php')) ?>" method="post" class="d-flex gap-2">
                                         <input type="hidden" name="csrf_token" value="<?= e(csrf_token()) ?>">
                                         <input type="hidden" name="report_id" value="<?= (int) $report['report_id'] ?>">
                                         <select name="status" class="form-select" aria-label="New report status">

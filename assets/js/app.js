@@ -11,6 +11,7 @@
 
     let activeRequest = null;
     let requestTimer = null;
+    let requestVersion = 0;
 
     function isAvailable(value) {
         return value !== null && value !== undefined && value !== '' && Number.isFinite(Number(value));
@@ -51,6 +52,7 @@
 
     function setRisk(rainfall, isStale) {
         const risk = rainfall.risk_level;
+        document.getElementById('risk-explanation').textContent = rainfall.risk_explanation || 'Risk cannot be assessed without complete rainfall data.';
         const classes = {
             low: 'text-bg-success',
             normal: 'text-bg-primary',
@@ -254,6 +256,7 @@
     }
 
     async function loadWeather() {
+        const version = ++requestVersion;
         const locationId = locationSelect.value;
         if (activeRequest) activeRequest.abort();
 
@@ -266,6 +269,7 @@
         }
 
         activeRequest = new AbortController();
+        setUnavailable();
 
         if (retryButton) retryButton.hidden = true;
         setMessage('Loading weather data and calculating the prototype risk level…');
@@ -299,7 +303,7 @@
                 throw new Error(payload.error || 'weather_provider_unavailable');
             }
 
-            if (locationSelect.value !== locationId) return;
+            if (version !== requestVersion || locationSelect.value !== locationId) return;
 
             const data = payload.data;
             setRisk(data.rainfall, data.stale === true);
@@ -317,7 +321,7 @@
                     : '';
 
                 setMessage(
-                    `Live weather loaded for ${data.location.location_name}${area}, but its rainfall summary could not be saved to the admin readings list. Check the PHP error log.`,
+                    `Live weather loaded for ${data.location.location_name}${area}, but its rainfall summary could not be saved to the admin readings list. Please notify the administrator.`,
                     true
                 );
             } else {
@@ -329,7 +333,7 @@
             }
         } catch (error) {
             if (error.name === 'AbortError') return;
-            if (locationSelect.value !== locationId) return;
+            if (version !== requestVersion || locationSelect.value !== locationId) return;
 
             if (retryButton) retryButton.hidden = false;
             setUnavailable();
@@ -339,6 +343,10 @@
     }
 
     locationSelect.addEventListener('change', () => {
+        ++requestVersion;
+        if (activeRequest) activeRequest.abort();
+        setUnavailable();
+        resetHistory('Loading the selected location…');
         window.clearTimeout(requestTimer);
         requestTimer = window.setTimeout(loadWeather, 200);
     });

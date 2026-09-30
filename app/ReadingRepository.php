@@ -61,6 +61,26 @@ final class ReadingRepository
         return $reading ?: null;
     }
 
+    /** Save one snapshot per location/provider/hour, preserving admin edits and archives. */
+    public function createFromApi(array $reading): void
+    {
+        $reading['risk_level'] = RiskAnalyzer::analyze(
+            $reading['rainfall_1h_mm'],
+            $reading['rainfall_24h_mm'],
+            $reading['rainfall_72h_mm']
+        );
+        $statement = $this->pdo->prepare(
+            'INSERT INTO readings
+                (location_id, rainfall_1h_mm, rainfall_24h_mm, rainfall_72h_mm,
+                 risk_level, source_name, source_url, observed_at, recorded_by_user_id)
+             VALUES
+                (:location_id, :rainfall_1h_mm, :rainfall_24h_mm, :rainfall_72h_mm,
+                 :risk_level, :source_name, :source_url, :observed_at, NULL)
+             ON DUPLICATE KEY UPDATE reading_id = reading_id'
+        );
+        $statement->execute($reading);
+    }
+
     public function create(array $reading, ?int $adminId): void
     {
         $reading['risk_level'] = RiskAnalyzer::analyze(

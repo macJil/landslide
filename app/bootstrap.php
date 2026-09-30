@@ -34,5 +34,9 @@ try {
 } catch (PDOException $exception) {
     error_log('SmartSlope database connection failed: ' . $exception->getMessage());
     http_response_code(503);
+    if (defined('SMARTSLOPE_JSON_REQUEST') && SMARTSLOPE_JSON_REQUEST) {
+        header('Content-Type: application/json; charset=utf-8');
+        exit(json_encode(['error' => 'database_unavailable']));
+    }
     exit('SmartSlope is temporarily unavailable. Check the local database configuration.');
 }

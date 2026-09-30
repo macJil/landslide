@@ -49,23 +49,56 @@ final class WeatherApiClient
         ], '', '&', PHP_QUERY_RFC3986);
         $url = self::ENDPOINT . '?' . $query;
 
-        $context = stream_context_create([
-            'http' => [
-                'method' => 'GET',
-                'timeout' => 12,
-                'ignore_errors' => true,
-                'header' => "Accept: application/json\r\nUser-Agent: SmartSlopeAcademicMVP/1.0\r\n",
-            ],
-            'ssl' => [
-                'verify_peer' => true,
-                'verify_peer_name' => true,
-            ],
-        ]);
+        $response = false;
+        $statusCode = 0;
 
-        $response = @file_get_contents($url, false, $context);
-        $statusLine = $http_response_header[0] ?? '';
-        if ($response === false || preg_match('/\s([45]\d\d)\s/', $statusLine, $matches) === 1) {
-            throw new RuntimeException('Weather provider request failed.');
+        if (function_exists('curl_init')) {
+            $handle = curl_init($url);
+            if ($handle === false) {
+                throw new RuntimeException('Could not initialize the PHP cURL client.');
+            }
+            curl_setopt_array($handle, [
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_CONNECTTIMEOUT => 5,
+                CURLOPT_TIMEOUT => 12,
+                CURLOPT_FOLLOWLOCATION => false,
+                CURLOPT_SSL_VERIFYPEER => true,
+                CURLOPT_SSL_VERIFYHOST => 2,
+                CURLOPT_HTTPHEADER => ['Accept: application/json'],
+                CURLOPT_USERAGENT => 'SmartSlopeAcademicMVP/1.0',
+            ]);
+            $response = curl_exec($handle);
+            $statusCode = (int) curl_getinfo($handle, CURLINFO_RESPONSE_CODE);
+            if ($response === false) {
+                $error = curl_error($handle);
+                curl_close($handle);
+                throw new RuntimeException('Weather provider request failed: ' . $error);
+            }
+            curl_close($handle);
+        } elseif (filter_var((string) ini_get('allow_url_fopen'), FILTER_VALIDATE_BOOLEAN)) {
+            $context = stream_context_create([
+                'http' => [
+                    'method' => 'GET',
+                    'timeout' => 12,
+                    'ignore_errors' => true,
+                    'header' => "Accept: application/json\r\nUser-Agent: SmartSlopeAcademicMVP/1.0\r\n",
+                ],
+                'ssl' => [
+                    'verify_peer' => true,
+                    'verify_peer_name' => true,
+                ],
+            ]);
+            $response = @file_get_contents($url, false, $context);
+            $statusLine = isset($http_response_header[0]) ? $http_response_header[0] : '';
+            if (preg_match('/\s(\d{3})\s/', $statusLine, $matches) === 1) {
+                $statusCode = (int) $matches[1];
+            }
+        } else {
+            throw new RuntimeException('Enable the PHP cURL extension or allow_url_fopen for weather requests.');
+        }
+
+        if ($response === false || $statusCode < 200 || $statusCode >= 300) {
+            throw new RuntimeException('Weather provider returned HTTP ' . $statusCode . '.');
         }
 
         try {

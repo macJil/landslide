@@ -5,6 +5,18 @@ require_once __DIR__ . '/../../app/bootstrap.php';
 require_user();
 $reportLocations = (new ReportRepository($pdo))->activeLocations();
 $riskLocations = (new LocationRepository($pdo))->activeForStudyArea();
+$defaultWeatherLocationId = '';
+foreach ($riskLocations as $location) {
+    $latitude = $location['latitude'];
+    $longitude = $location['longitude'];
+    if (is_numeric($latitude) && is_numeric($longitude)
+        && (float) $latitude >= -90 && (float) $latitude <= 90
+        && (float) $longitude >= -180 && (float) $longitude <= 180
+    ) {
+        $defaultWeatherLocationId = (string) $location['location_id'];
+        break;
+    }
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -38,9 +50,11 @@ $riskLocations = (new LocationRepository($pdo))->activeForStudyArea();
         <div class="col-lg-6"><?php include __DIR__ . '/risk_area.php'; ?></div>
         <div class="col-lg-6"><?php include __DIR__ . '/report.php'; ?></div>
     </div>
+    <div class="row g-3 mt-1">
+        <div class="col-12"><?php include __DIR__ . '/weather_readings.php'; ?></div>
+    </div>
 </main>
 <?php include __DIR__ . '/../footer.html'; ?>
-<script src="<?= e(app_url('assets/js/vendor/jquery.min.js')) ?>"></script>
-<script src="<?= e(app_url('assets/js/app.js')) ?>"></script>
+<script src="<?= e(app_url('assets/js/app.js?v=' . filemtime(__DIR__ . '/../../assets/js/app.js'))) ?>" defer></script>
 </body>
 </html>

@@ -1,4 +1,4 @@
-<section class="card" aria-labelledby="risk-heading">
+<section class="card h-100 w-100" aria-labelledby="risk-heading">
     <div class="card-header"><h2 class="h5 mb-0" id="risk-heading">Latest location reading</h2></div>
     <div class="card-body">
         <label class="form-label" for="risk-location-select">Study area location</label>
@@ -44,27 +44,10 @@
                     <dt class="col-sm-6">Rainfall, 72 hours</dt><dd class="col-sm-6" id="rainfall-72h">—</dd>
                     <dt class="col-sm-6">Latest hourly timestamp</dt><dd class="col-sm-6" id="reading-observed-at">—</dd>
                 </dl>
-                <p class="small text-muted mb-0"><?= e(RiskAnalyzer::description()) ?> This is a prototype indicator, not an official landslide warning.</p>
+                <p class="small text-muted mb-0">This is a prototype indicator, not an official landslide warning.</p>
             </section>
 
-            <section aria-labelledby="current-weather-heading">
-                <h3 class="h6" id="current-weather-heading">Current weather conditions</h3>
-                <dl class="row mb-0">
-                    <dt class="col-sm-6">Temperature</dt><dd class="col-sm-6" id="weather-temperature">—</dd>
-                    <dt class="col-sm-6">Feels like</dt><dd class="col-sm-6" id="weather-apparent-temperature">—</dd>
-                    <dt class="col-sm-6">Relative humidity</dt><dd class="col-sm-6" id="weather-humidity">—</dd>
-                    <dt class="col-sm-6">Precipitation (API interval)</dt><dd class="col-sm-6" id="weather-precipitation">—</dd>
-                    <dt class="col-sm-6">Rain / showers</dt><dd class="col-sm-6" id="weather-rain-showers">—</dd>
-                    <dt class="col-sm-6">Wind speed / gusts</dt><dd class="col-sm-6" id="weather-wind">—</dd>
-                    <dt class="col-sm-6">Wind direction</dt><dd class="col-sm-6" id="weather-wind-direction">—</dd>
-                    <dt class="col-sm-6">Cloud cover</dt><dd class="col-sm-6" id="weather-cloud-cover">—</dd>
-                    <dt class="col-sm-6">Soil moisture (0–1 cm)</dt><dd class="col-sm-6" id="weather-soil-moisture-shallow">—</dd>
-                    <dt class="col-sm-6">Soil moisture (27–81 cm)</dt><dd class="col-sm-6" id="weather-soil-moisture-deep">—</dd>
-                    <dt class="col-sm-6">Weather code (WMO)</dt><dd class="col-sm-6" id="weather-code">—</dd>
-                    <dt class="col-sm-6">Weather data time</dt><dd class="col-sm-6" id="weather-current-time">—</dd>
-                </dl>
-            </section>
-            <p class="small text-muted mt-3 mb-0">Weather data: <a href="https://open-meteo.com/" target="_blank" rel="noopener noreferrer">Open-Meteo</a>, licensed CC BY 4.0. These are model-based estimates, not measurements from a local rain gauge or slope sensor. Soil moisture is displayed as context and is not used in the current risk rule.</p>
+
         </div>
         <?php if (!$riskLocations): ?>
             <p class="mb-0">No active locations are available in the study area.</p>

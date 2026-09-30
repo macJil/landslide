@@ -81,6 +81,65 @@ final class ReadingRepository
         $statement->execute($reading);
     }
 
+    /** Save all displayed provider values. Caller owns the transaction.
+     * Current interval values and hourly totals have separate identities.
+     * Re-fetching an observation updates it instead of duplicating it.
+     */
+    public function saveWeatherObservations(int $locationId, array $current, array $hourly, string $fetchedAt): int
+    {
+        $fields = [
+            'temperature_2m',
+            'relative_humidity_2m',
+            'apparent_temperature',
+            'precipitation',
+            'rain',
+            'showers',
+            'weather_code',
+            'cloud_cover',
+            'pressure_msl',
+            'surface_pressure',
+            'wind_speed_10m',
+            'wind_direction_10m',
+            'wind_gusts_10m',
+            'soil_moisture_0_to_1cm',
+            'soil_moisture_1_to_3cm',
+            'soil_moisture_3_to_9cm',
+            'soil_moisture_9_to_27cm',
+            'soil_moisture_27_to_81cm',
+        ];
+        $columns = array_merge(
+            ['location_id', 'source_name', 'observation_kind', 'observed_at', 'fetched_at', 'interval_seconds'],
+            $fields
+        );
+        $updates = array_merge(['fetched_at', 'interval_seconds'], $fields);
+        $statement = $this->pdo->prepare(
+            'INSERT INTO weather_observations (' . implode(', ', $columns) . ') VALUES (:'
+            . implode(', :', $columns) . ') ON DUPLICATE KEY UPDATE '
+            . implode(', ', array_map(static fn(string $column): string => $column . ' = VALUES(' . $column . ')', $updates))
+        );
+        $utc = new DateTimeZone('UTC');
+        $save = static function (array $row, string $kind) use ($statement, $locationId, $fetchedAt, $fields, $utc): void {
+            $values = [
+                'location_id' => $locationId,
+                'source_name' => 'Open-Meteo',
+                'observation_kind' => $kind,
+                'observed_at' => (new DateTimeImmutable($row['time']))->setTimezone($utc)->format('Y-m-d H:i:s'),
+                'fetched_at' => $fetchedAt,
+                'interval_seconds' => $kind === 'hourly' ? 3600 : ($row['interval'] ?? null),
+            ];
+            foreach ($fields as $field) {
+                $value = $row[$field] ?? null;
+                $values[$field] = is_numeric($value) ? (float) $value : null;
+            }
+            $statement->execute($values);
+        };
+        $save($current, 'current');
+        foreach ($hourly as $row) {
+            $save($row, 'hourly');
+        }
+        return count($hourly) + 1;
+    }
+
     public function create(array $reading, ?int $adminId): void
     {
         $reading['risk_level'] = RiskAnalyzer::analyze(

@@ -9,6 +9,7 @@
 
     if (!locationSelect || !readingPanel || !readingMessage || !historyBody) return;
 
+    const refreshButton = document.getElementById('weather-refresh');
     let activeRequest = null;
     let requestTimer = null;
     let requestVersion = 0;
@@ -28,7 +29,7 @@
         const parsed = new Date(withZone);
         return Number.isNaN(parsed.getTime())
             ? time
-            : parsed.toLocaleString('en-PH', { timeZone: 'Asia/Manila' });
+            : `${parsed.toLocaleString('en-PH', { timeZone: 'Asia/Manila', year: 'numeric', month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true })} PHT`;
     }
 
     function setMessage(message, isError = false) {
@@ -260,7 +261,11 @@
         const locationId = locationSelect.value;
         if (activeRequest) activeRequest.abort();
 
+        refreshButton.disabled = !locationId;
         if (!locationId) {
+            refreshButton.textContent = 'Refresh readings';
+            document.getElementById('weather-location-label').textContent = 'Select a location above.';
+            document.getElementById('weather-refresh-time').textContent = 'Not refreshed yet.';
             if (retryButton) retryButton.hidden = true;
             setMessage('Choose a location with saved coordinates to load weather readings.');
             setUnavailable();
@@ -268,6 +273,9 @@
             return;
         }
 
+        refreshButton.disabled = true;
+        refreshButton.textContent = 'Refreshing…';
+        document.getElementById('weather-refresh-time').textContent = 'Fetching the latest provider data…';
         activeRequest = new AbortController();
         setUnavailable();
 
@@ -306,6 +314,8 @@
             if (version !== requestVersion || locationSelect.value !== locationId) return;
 
             const data = payload.data;
+            document.getElementById('weather-location-label').textContent = data.location.location_name + (data.location.purok_zone ? ` — ${data.location.purok_zone}` : '');
+            document.getElementById('weather-refresh-time').textContent = `Last refreshed: ${timeLabel(data.retrieved_at)}. Provider data: ${timeLabel(data.current?.time)}.`;
             setRisk(data.rainfall, data.stale === true);
             setCurrent(data.current);
             setHistory(data.hourly, data.retrieved_at);
@@ -321,7 +331,7 @@
                     : '';
 
                 setMessage(
-                    `Live weather loaded for ${data.location.location_name}${area}, but its rainfall summary could not be saved to the admin readings list. Please notify the administrator.`,
+                    `Live weather loaded for ${data.location.location_name}${area}, but the readings could not be saved to the database. Please notify the administrator.`,
                     true
                 );
             } else {
@@ -329,7 +339,7 @@
                     ? ` — ${data.location.purok_zone}`
                     : '';
 
-                setMessage(`Weather readings loaded for ${data.location.location_name}${area}.`);
+                setMessage(`Weather readings loaded for ${data.location.location_name}${area}. ${data.saved_observations ?? 0} observations saved or updated in the database.`);
             }
         } catch (error) {
             if (error.name === 'AbortError') return;
@@ -339,11 +349,19 @@
             setUnavailable();
             setMessage(messageFor(error.message), true);
             resetHistory('No hourly readings loaded.');
+            document.getElementById('weather-refresh-time').textContent = 'Refresh failed. No current readings loaded.';
+        } finally {
+            if (version === requestVersion) {
+                refreshButton.disabled = !locationSelect.value;
+                refreshButton.textContent = 'Refresh readings';
+            }
         }
     }
 
     locationSelect.addEventListener('change', () => {
         ++requestVersion;
+        document.getElementById('weather-location-label').textContent = 'Loading selected location…';
+        document.getElementById('weather-refresh-time').textContent = '';
         if (activeRequest) activeRequest.abort();
         setUnavailable();
         resetHistory('Loading the selected location…');
@@ -351,6 +369,11 @@
         requestTimer = window.setTimeout(loadWeather, 200);
     });
 
+    refreshButton.addEventListener('click', () => {
+        window.clearTimeout(requestTimer);
+        loadWeather();
+    });
+    refreshButton.disabled = !locationSelect.value;
     if (retryButton) retryButton.addEventListener('click', loadWeather);
 
     if (locationSelect.value) {

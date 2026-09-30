@@ -1,4 +1,4 @@
-<section class="card">
+<section class="card h-100 w-100">
     <div class="card-header"><h3 class="h5 mb-0">Submit a ground report</h3></div>
     <div class="card-body">
         <p class="text-muted">Describe an observed ground or slope condition. Reports are reviewed by an administrator.</p>

@@ -71,3 +71,29 @@ test('late response cannot overwrite newly selected location',async()=>{
   finishOld(response(payload('Location one','high')));await settle();
   assert.equal(e['risk-level'].textContent,'LOW');assert.match(e['reading-message'].textContent,/Location two/);
 });
+
+test('refresh reloads the same selected location and unlocks button',async()=>{
+  let calls=0;const e=mount(async()=>{calls++;return response(payload());});await settle();
+  e['weather-refresh'].events.click();assert.equal(e['weather-refresh'].disabled,true);await settle();
+  assert.equal(calls,2);assert.equal(e['weather-refresh'].disabled,false);
+  assert.match(e['weather-refresh-time'].textContent,/PHT/);
+});
+test('UTC risk timestamp and Manila provider timestamp show the same instant',async()=>{
+  const e=mount(async()=>response(payload()));await settle();
+  assert.equal(e['reading-observed-at'].textContent,e['weather-current-time'].textContent);
+  assert.match(e['weather-current-time'].textContent,/09:00:00/);
+});
+test('risk card excludes current conditions and both upper cards stretch',()=>{
+  assert.doesNotMatch(read('components/users/risk_area.php'),/id="weather-temperature"/);
+  for(const file of ['risk_area.php','report.php'])assert.match(read('components/users/'+file),/h-100 w-100/);
+  const page=read('components/users/user.php');
+  assert.ok(page.indexOf("'/weather_readings.php'")>page.indexOf("'/report.php'"));
+});
+
+test('one dashboard owns current values, history and refresh; no deleted component reference',()=>{
+ const page=read('components/users/user.php');
+ assert.doesNotMatch(page,/current_weather.php/);
+ const dashboard=read('components/users/weather_readings.php');
+ for(const id of ['weather-refresh','weather-temperature','weather-hourly-body'])assert.match(dashboard,new RegExp('id="'+id+'"'));
+ assert.equal(fs.existsSync(path.join(root,'components/users/current_weather.php')),false);
+});

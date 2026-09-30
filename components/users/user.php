@@ -47,8 +47,8 @@ foreach ($riskLocations as $location) {
     <?php endif; ?>
 
     <div class="row g-3">
-        <div class="col-lg-6"><?php include __DIR__ . '/risk_area.php'; ?></div>
-        <div class="col-lg-6"><?php include __DIR__ . '/report.php'; ?></div>
+        <div class="col-lg-6 d-flex"><?php include __DIR__ . '/risk_area.php'; ?></div>
+        <div class="col-lg-6 d-flex"><?php include __DIR__ . '/report.php'; ?></div>
     </div>
     <div class="row g-3 mt-1">
         <div class="col-12"><?php include __DIR__ . '/weather_readings.php'; ?></div>

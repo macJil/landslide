@@ -73,6 +73,7 @@ try {
 
     $timezone = new DateTimeZone('Asia/Manila');
     $currentTime = new DateTimeImmutable((string) $weather['current']['time'], $timezone);
+    $weather['current']['time'] = $currentTime->format(DateTimeInterface::ATOM);
     $earliestTime = $currentTime->modify('-72 hours');
     $hourlyData = $weather['hourly'];
     $hourlyFields = [
@@ -94,7 +95,7 @@ try {
             continue;
         }
 
-        $row = ['time' => $timeValue];
+        $row = ['time' => $time->format(DateTimeInterface::ATOM)];
         foreach ($hourlyFields as $field) {
             $value = $hourlyData[$field][$index] ?? null;
             $row[$field] = is_numeric($value) ? (float) $value : null;
@@ -146,12 +147,17 @@ try {
         : strtoupper($riskLevel) . ' prototype rainfall indicator for the selected location. '
             . RiskAnalyzer::description();
 
-    // Persist the rainfall summary so the existing admin readings page can
-    // review the provider-backed readings. Repeated requests preserve the same
-    // location/hour row; archived readings remain archived.
+    $retrievedAt = new DateTimeImmutable('now', new DateTimeZone('UTC'));
     $persistenceWarning = false;
-    if ($riskLevel !== null) {
-        try {
+    $savedObservations = 0;
+    try {
+        $pdo->beginTransaction();
+        $repository = new ReadingRepository($pdo);
+        $savedObservations = $repository->saveWeatherObservations(
+            (int) $location['location_id'], $weather['current'], $history,
+            $retrievedAt->format('Y-m-d H:i:s')
+        );
+        if ($riskLevel !== null) {
             (new ReadingRepository($pdo))->createFromApi([
                 'location_id' => (int) $location['location_id'],
                 'rainfall_1h_mm' => $rainfall1h,
@@ -161,10 +167,15 @@ try {
                 'source_url' => 'https://open-meteo.com/',
                 'observed_at' => $observedAtUtc,
             ]);
-        } catch (PDOException $exception) {
-            error_log('SmartSlope weather reading save failed: ' . $exception->getMessage());
-            $persistenceWarning = true;
         }
+        $pdo->commit();
+    } catch (Throwable $exception) {
+        if ($pdo->inTransaction()) {
+            $pdo->rollBack();
+        }
+        error_log('SmartSlope weather save failed: ' . $exception->getMessage());
+        $persistenceWarning = true;
+        $savedObservations = 0;
     }
 
     weather_json(200, [
@@ -176,8 +187,8 @@ try {
             ],
             'source_name' => 'Open-Meteo',
             'source_url' => 'https://open-meteo.com/',
-            'retrieved_at' => (new DateTimeImmutable('now', new DateTimeZone('UTC')))
-                ->format(DateTimeInterface::ATOM),
+            'retrieved_at' => $retrievedAt->format(DateTimeInterface::ATOM),
+            'saved_observations' => $savedObservations,
             'persistence_warning' => $persistenceWarning,
             'current' => $weather['current'],
             'rainfall' => [
